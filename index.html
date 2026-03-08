@@ -1,21 +1,21 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Random Chat</title>
+<title>Random Stranger Chat</title>
 
 <style>
 body{
 font-family:Arial;
-background:#0f0f0f;
+background:#111;
 color:white;
 text-align:center;
 }
 
-#chatbox{
+#chat{
 width:80%;
 height:300px;
-border:1px solid gray;
 margin:auto;
+border:1px solid gray;
 overflow:auto;
 padding:10px;
 background:#1a1a1a;
@@ -38,74 +38,117 @@ margin:5px;
 
 <h1>Random Stranger Chat</h1>
 
-<div id="chatbox"></div>
+<p id="status">Click Start</p>
+
+<div id="chat"></div>
 
 <br>
 
-<input id="message" placeholder="type message...">
-<button onclick="sendMessage()">Send</button>
+<input id="msg" placeholder="Type message...">
+<button onclick="sendMsg()">Send</button>
 
 <br><br>
 
-<button onclick="startChat()">Start Chat</button>
-<button onclick="nextChat()">Next Person</button>
+<button onclick="start()">Start Chat</button>
+<button onclick="next()">Next Stranger</button>
 
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
 
 <script>
 
-  const firebaseConfig = {
-    apiKey: "AIzaSyC3zgBQLFgUhHHJPlTNeyGobAilCVPEvBk",
-    authDomain: "random-chat-2ed9a.firebaseapp.com",
-    projectId: "random-chat-2ed9a",
-    storageBucket: "random-chat-2ed9a.firebasestorage.app",
-    messagingSenderId: "608975566065",
-    appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
+const firebaseConfig = {
+apiKey: "AIzaSyC3zgBQLFgUhHHJPlTNeyGobAilCVPEvBk",
+authDomain: "random-chat-2ed9a.firebaseapp.com",
+projectId: "random-chat-2ed9a",
+storageBucket: "random-chat-2ed9a.firebasestorage.app",
+messagingSenderId: "608975566065",
+appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
 };
 
 firebase.initializeApp(firebaseConfig);
 var db = firebase.firestore();
 
-let chatRoom = null;
+let myId = Math.random().toString(36).substring(2);
+let room = null;
 
-function startChat(){
+function start(){
 
-chatRoom = "room_" + Math.floor(Math.random()*100000);
+document.getElementById("status").innerText="Looking for stranger...";
 
-document.getElementById("chatbox").innerHTML += "<p>Connected to stranger</p>";
+db.collection("waiting").doc(myId).set({
+online:true
+});
 
-db.collection("rooms").doc(chatRoom).onSnapshot(doc=>{
-let data = doc.data();
-if(data && data.message){
-addMessage("Stranger: " + data.message);
+db.collection("waiting").get().then(snapshot=>{
+
+if(snapshot.size>1){
+
+snapshot.forEach(doc=>{
+
+if(doc.id!=myId && !room){
+
+room="room_"+doc.id+"_"+myId;
+
+db.collection("waiting").doc(doc.id).delete();
+db.collection("waiting").doc(myId).delete();
+
+connectRoom();
+
 }
+
 });
 
 }
 
-function sendMessage(){
-
-let msg = document.getElementById("message").value;
-
-db.collection("rooms").doc(chatRoom).set({
-message:msg
 });
 
-addMessage("You: "+msg);
+}
 
-document.getElementById("message").value="";
+function connectRoom(){
+
+document.getElementById("status").innerText="Connected to stranger";
+
+db.collection("rooms").doc(room).onSnapshot(doc=>{
+
+let data=doc.data();
+
+if(data && data.msg){
+add("Stranger: "+data.msg);
+}
+
+});
 
 }
 
-function addMessage(text){
-let box = document.getElementById("chatbox");
-box.innerHTML += "<p>"+text+"</p>";
-box.scrollTop = box.scrollHeight;
+function sendMsg(){
+
+let m=document.getElementById("msg").value;
+
+db.collection("rooms").doc(room).set({
+msg:m
+});
+
+add("You: "+m);
+
+document.getElementById("msg").value="";
+
 }
 
-function nextChat(){
+function add(t){
+
+let c=document.getElementById("chat");
+
+c.innerHTML+="<p>"+t+"</p>";
+
+c.scrollTop=c.scrollHeight;
+
+}
+
+function next(){
+
 location.reload();
+
 }
 
 </script>
