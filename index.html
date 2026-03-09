@@ -1,84 +1,37 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Chat & Voice Rooms</title>
-<style>
-body{
-  font-family:Arial;
-  background:#111;
-  color:white;
-  text-align:center;
-  margin:0;
-}
-#container{
-  width:80%;
-  margin:auto;
-  padding:20px;
-}
-#rooms{
-  border:1px solid gray;
-  background:#1a1a1a;
-  padding:15px;
-  margin-bottom:20px;
-}
-.room{
-  padding:10px;
-  border-bottom:1px solid gray;
-}
-#chat,#voice{
-  border:1px solid gray;
-  height:300px;
-  overflow:auto;
-  padding:10px;
-  background:#1a1a1a;
-  margin-bottom:10px;
-}
-input,button{
-  padding:8px;
-  margin:5px;
-}
-button{
-  cursor:pointer;
-}
-#online{
-  margin:10px;
-  color:#00ff9c;
-}
-</style>
+  <title>Chat + Voice Rooms</title>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 </head>
 <body>
-
 <h1>Chat & Voice Rooms</h1>
-<div id="online">Users online: 0</div>
-<div id="container">
 
-<input id="username" placeholder="Username"><br>
+<!-- Room selection -->
+<label>Room ID: <input type="text" id="roomId"></label>
+<button onclick="joinRoom('chat')">Join Chat Room</button>
+<button onclick="joinRoom('voice')">Join Voice Room</button>
+<button onclick="leaveRoom()">Leave Room</button>
 
-<input id="roomName" placeholder="Room Name">
-<select id="roomType">
-  <option value="chat">Chat Room</option>
-  <option value="voice">Voice Room</option>
-</select>
-<input id="roomPassword" placeholder="Optional Password">
-<button onclick="createRoom()">Create Room</button>
-
-<h3>Available Rooms</h3>
-<div id="rooms"></div>
-
-<h3 id="roomTitle"></h3>
-<div id="chat"></div>
-<div id="voice"></div>
-
-<input id="msg" placeholder="Message">
-<input type="file" id="fileInput">
-<button onclick="sendMessage()">Send</button>
-<button onclick="startVoice()">Start Voice Chat</button>
-
+<!-- Chat container -->
+<div id="chatContainer" style="display:none;">
+  <h2>Text Chat</h2>
+  <div id="messages" style="border:1px solid #ccc;height:200px;overflow-y:auto;"></div>
+  <input type="text" id="chatInput" placeholder="Type message...">
+  <button onclick="sendMessage()">Send</button>
 </div>
 
-<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+<!-- Voice container -->
+<div id="voiceContainer" style="display:none;">
+  <h2>Voice Chat</h2>
+  <p id="voiceStatus">Voice chat not started</p>
+  <audio id="remoteAudio" autoplay></audio>
+</div>
+
 <script>
+  // ===== Firebase Setup =====
 const firebaseConfig = {
 apiKey: "AIzaSyC3zgBQLFgUhHHJPlTNeyGobAilCVPEvBk",
 authDomain: "random-chat-2ed9a.firebaseapp.com",
@@ -86,244 +39,144 @@ projectId: "random-chat-2ed9a",
 storageBucket: "random-chat-2ed9a.firebasestorage.app",
 messagingSenderId: "608975566065",
 appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
-};
-firebase.initializeApp(firebaseConfig);
-var db = firebase.firestore();
-
-let userId=Math.random().toString(36).substring(2);
-let currentRoom=null;
-let usernameInput=document.getElementById("username");
-const badWords=["fuck","shit","bitch","ass"];
-let peers={}; // WebRTC peers
-
-// Typing indicator
-let typingTimeout;
-
-function filter(text){
-  badWords.forEach(word=>{
-    text=text.replace(new RegExp(word,"gi"),"****");
-  });
-  return text;
-}
-
-// Online users counter
-function updateOnline(){
-  db.collection("online").doc(userId).set({time:Date.now()});
-  db.collection("online").onSnapshot(s=>{
-    document.getElementById("online").innerText="Users online: "+s.size;
-  });
-}
-
-// Create room
-function createRoom(){
-  let name=document.getElementById("roomName").value.trim();
-  if(!name) return;
-  let type=document.getElementById("roomType").value;
-  let password=document.getElementById("roomPassword").value;
-  db.collection("rooms").doc(name).set({
-    type:type,
-    password:password||"",
-    users:0,
-    created:Date.now()
-  });
-  joinRoom(name,password);
-}
-
-// Load rooms list
-function loadRooms(){
-  db.collection("rooms").onSnapshot(snapshot=>{
-    let html="";
-    snapshot.forEach(doc=>{
-      let data=doc.data();
-      html+=`<div class="room">
-      <b>${doc.id}</b> [${data.type}] (${data.users} users)
-      ${data.password?'<i>🔒</i>':''}
-      <button onclick="joinRoomPrompt('${doc.id}')">Join</button>
-      </div>`;
-    });
-    document.getElementById("rooms").innerHTML=html;
-  });
-}
-
-// Join room prompt
-function joinRoomPrompt(room){
-  db.collection("rooms").doc(room).get().then(doc=>{
-    if(!doc.exists) return;
-    let data=doc.data();
-    if(data.password){
-      let p=prompt("Enter password for "+room);
-      joinRoom(room,p);
-    } else {
-      joinRoom(room);
-    }
-  });
-}
-
-// Join room
-function joinRoom(room,password=""){
-  db.collection("rooms").doc(room).get().then(doc=>{
-    if(!doc.exists) return alert("Room not found");
-    let data=doc.data();
-    if(data.password && data.password!==password) return alert("Wrong password");
-    currentRoom=room;
-    document.getElementById("roomTitle").innerText="Room: "+room;
-    db.collection("rooms").doc(room).update({users:firebase.firestore.FieldValue.increment(1)});
-
-    // Load messages for chat rooms
-    if(data.type==="chat"){
-      db.collection("rooms").doc(room).collection("messages")
-      .orderBy("time")
-      .onSnapshot(snapshot=>{
-        let chatHtml="";
-        snapshot.forEach(doc=>{
-          let msg=doc.data();
-          if(msg.type==="text") chatHtml+="<p>"+msg.text+"</p>";
-          if(msg.type==="file"){
-            if(msg.fileType.startsWith("image/")){
-              chatHtml+='<p>'+msg.sender+':<br><img src="'+msg.url+'" width="200"></p>';
-            } else {
-              chatHtml+='<p>'+msg.sender+': <a href="'+msg.url+'" target="_blank">'+msg.fileName+'</a></p>';
-            }
-          }
-          if(msg.type==="typing") document.getElementById("chat").innerHTML="<i>Someone is typing...</i>";
-        });
-        document.getElementById("chat").innerHTML=chatHtml;
-        document.getElementById("chat").scrollTop=document.getElementById("chat").scrollHeight;
-      });
-    }
-    if(data.type==="voice") initVoice();
-  });
-}
-
-// Send chat message
-function sendMessage(){
-  if(!currentRoom) return;
-  let text=document.getElementById("msg").value;
-  let fileInput=document.getElementById("fileInput");
-  let name=usernameInput.value||"Anonymous";
-
-  if(fileInput.files.length>0){
-    let file=fileInput.files[0];
-    let reader=new FileReader();
-    reader.onload=function(e){
-      let dataUrl=e.target.result;
-      db.collection("rooms").doc(currentRoom).collection("messages").add({
-        type:"file",
-        url:dataUrl,
-        fileType:file.type,
-        fileName:file.name,
-        sender:name,
-        time:Date.now()
-      });
-      fileInput.value="";
-    }
-    reader.readAsDataURL(file);
-  }
-
-  if(text.trim()!==""){
-    text=filter(name+": "+text);
-    db.collection("rooms").doc(currentRoom).collection("messages").add({
-      type:"text",
-      text:text,
-      time:Date.now()
-    });
-    document.getElementById("msg").value="";
-  }
-
-  // Typing indicator reset
-  db.collection("rooms").doc(currentRoom).collection("messages").add({type:"typing",time:Date.now()});
-}
-
-// Typing detection
-document.getElementById("msg").addEventListener("input",()=>{
-  if(!currentRoom) return;
-  db.collection("rooms").doc(currentRoom).collection("messages").add({type:"typing",time:Date.now()});
-  clearTimeout(typingTimeout);
-  typingTimeout=setTimeout(()=>{},2000);
-});
-
-// Voice Chat using WebRTC
-let localStream=null;
-let voiceStarted=false;
-
-async function initVoice(){
-  if(voiceStarted) return;
-  voiceStarted=true;
-  document.getElementById("voice").innerHTML="<p>Initializing voice chat...</p>";
-  localStream=await navigator.mediaDevices.getUserMedia({audio:true});
-  db.collection("rooms").doc(currentRoom).collection("voice").onSnapshot(snapshot=>{
-    snapshot.docChanges().forEach(change=>{
-      if(change.type==="added"){
-        let peerId=change.doc.id;
-        if(peerId===userId) return;
-        if(!peers[peerId]) startPeer(peerId,true);
-      }
-    });
-  });
-  // announce self
-  db.collection("rooms").doc(currentRoom).collection("voice").doc(userId).set({joined:Date.now()});
-}
-
-// WebRTC peer connection
-async function startPeer(peerId,initiator=false){
-  let pc=new RTCPeerConnection();
-  peers[peerId]=pc;
-  localStream.getTracks().forEach(track=>pc.addTrack(track,localStream));
-  pc.ontrack=e=>{
-    let audio=document.createElement("audio");
-    audio.srcObject=e.streams[0];
-    audio.autoplay=true;
-    document.getElementById("voice").appendChild(audio);
   };
-  // signaling using Firestore
-  let offerRef=db.collection("rooms").doc(currentRoom).collection("voice").doc(peerId).collection("signal");
-  if(initiator){
-    let offer=await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    await offerRef.doc(userId).set({desc:offer.toJSON()});
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+  let currentRoomId = null;
+  let currentRoomType = null;
+  let localStream;
+  let peerConnection;
+
+  // ===== Authentication (anonymous) =====
+  firebase.auth().signInAnonymously();
+
+  // ===== Room functions =====
+  function joinRoom(type) {
+    currentRoomId = document.getElementById("roomId").value.trim();
+    if (!currentRoomId) { alert("Enter a room ID"); return; }
+    currentRoomType = type;
+
+    if(type === "chat") {
+      document.getElementById("chatContainer").style.display = "block";
+      document.getElementById("voiceContainer").style.display = "none";
+      setupChat();
+    } else if(type === "voice") {
+      document.getElementById("voiceContainer").style.display = "block";
+      document.getElementById("chatContainer").style.display = "none";
+      startVoiceChat();
+    }
   }
-  offerRef.onSnapshot(snapshot=>{
-    snapshot.forEach(doc=>{
-      let data=doc.data();
-      if(data.desc){
-        let desc=new RTCSessionDescription(data.desc);
-        pc.setRemoteDescription(desc).then(async()=>{
-          if(desc.type==="offer"){
-            let answer=await pc.createAnswer();
-            await pc.setLocalDescription(answer);
-            await offerRef.doc(userId).set({desc:answer.toJSON()});
-          }
+
+  function leaveRoom() {
+    document.getElementById("chatContainer").style.display = "none";
+    document.getElementById("voiceContainer").style.display = "none";
+
+    if(peerConnection) {
+      peerConnection.close();
+      peerConnection = null;
+    }
+    if(localStream) {
+      localStream.getTracks().forEach(track => track.stop());
+      localStream = null;
+    }
+
+    if(currentRoomId && currentRoomType){
+      db.collection(currentRoomType + "Rooms").doc(currentRoomId).collection("users")
+        .doc(firebase.auth().currentUser.uid).delete();
+    }
+
+    currentRoomId = null;
+    currentRoomType = null;
+  }
+
+  // ===== Chat functions =====
+  function setupChat() {
+    const messagesDiv = document.getElementById("messages");
+    messagesDiv.innerHTML = "";
+    db.collection("chatRooms").doc(currentRoomId).collection("messages")
+      .orderBy("timestamp")
+      .onSnapshot(snapshot => {
+        messagesDiv.innerHTML = "";
+        snapshot.forEach(doc => {
+          const msg = doc.data();
+          messagesDiv.innerHTML += "<div><b>" + msg.user + ":</b> " + msg.text + "</div>";
         });
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      });
+  }
+
+  function sendMessage() {
+    const input = document.getElementById("chatInput");
+    const text = input.value.trim();
+    if(!text) return;
+    db.collection("chatRooms").doc(currentRoomId).collection("messages").add({
+      text,
+      user: firebase.auth().currentUser.uid,
+      timestamp: Date.now()
+    });
+    input.value = "";
+  }
+
+  // ===== Voice functions =====
+  async function startVoiceChat() {
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      document.getElementById("voiceStatus").innerText = "Voice chat ready!";
+      setupPeerConnection();
+      await createOffer();
+    } catch (err) {
+      alert("Microphone access denied: " + err.message);
+    }
+  }
+
+  function setupPeerConnection() {
+    peerConnection = new RTCPeerConnection({ iceServers:[{ urls: "stun:stun.l.google.com:19302" }] });
+    localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+    peerConnection.ontrack = event => {
+      const audio = document.getElementById("remoteAudio");
+      audio.srcObject = event.streams[0];
+    };
+
+    peerConnection.onicecandidate = event => {
+      if(event.candidate){
+        db.collection("voiceRooms").doc(currentRoomId).collection("candidates")
+          .add({ candidate: event.candidate.toJSON() });
       }
-      if(data.candidate){
-        pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+    };
+
+    // Listen for remote offer/answer
+    const roomRef = db.collection("voiceRooms").doc(currentRoomId);
+    roomRef.onSnapshot(async snapshot => {
+      const data = snapshot.data();
+      if(!data) return;
+      if(data.answer && peerConnection.remoteDescription === null){
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+      }
+      if(data.offer && !peerConnection.localDescription){
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+        roomRef.update({ answer: answer.toJSON() });
       }
     });
-  });
-}
 
-// Start voice chat manually (for user)
-function startVoice(){ initVoice(); }
-
-// Leave cleanup
-window.addEventListener("beforeunload",()=>{
-  db.collection("online").doc(userId).delete();
-  if(currentRoom){
-    let ref=db.collection("rooms").doc(currentRoom);
-    ref.collection("users").doc(userId).delete().then(()=>{
-      ref.collection("users").get().then(s=>{
-        if(s.size===0) ref.delete();
+    // Listen for ICE candidates
+    roomRef.collection("candidates").onSnapshot(snapshot => {
+      snapshot.docChanges().forEach(async change => {
+        if(change.type === "added"){
+          const c = new RTCIceCandidate(change.doc.data().candidate);
+          await peerConnection.addIceCandidate(c);
+        }
       });
     });
-    if(peers){
-      Object.values(peers).forEach(pc=>pc.close());
-    }
-    db.collection("rooms").doc(currentRoom).collection("voice").doc(userId).delete();
   }
-});
 
-updateOnline();
-loadRooms();
+  async function createOffer() {
+    const offer = await peerConnection.createOffer();
+    await peerConnection.setLocalDescription(offer);
+    db.collection("voiceRooms").doc(currentRoomId).set({ offer: offer.toJSON() });
+  }
 </script>
 </body>
 </html>
