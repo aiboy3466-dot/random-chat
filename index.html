@@ -1,9 +1,10 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Random Stranger Chat</title>
+<title>Chat Rooms</title>
 
 <style>
+
 body{
 font-family:Arial;
 background:#111;
@@ -11,46 +12,55 @@ color:white;
 text-align:center;
 }
 
-#chat{
-width:80%;
-height:300px;
-margin:auto;
+#rooms{
 border:1px solid gray;
+width:60%;
+margin:auto;
+padding:10px;
+margin-bottom:20px;
+}
+
+#chat{
+border:1px solid gray;
+width:60%;
+height:250px;
+margin:auto;
 overflow:auto;
 padding:10px;
 background:#1a1a1a;
 }
 
-input{
-width:60%;
-padding:10px;
-}
-
 button{
-padding:10px;
+padding:8px;
 margin:5px;
 }
-</style>
 
+input{
+padding:8px;
+width:50%;
+}
+
+</style>
 </head>
 
 <body>
 
-<h1>Random Stranger Chat</h1>
+<h1>Public Chat Rooms</h1>
 
-<p id="status">Click Start</p>
+<button onclick="createRoom()">Create Room</button>
+
+<h3>Available Rooms</h3>
+
+<div id="rooms"></div>
+
+<h3 id="roomTitle"></h3>
 
 <div id="chat"></div>
 
 <br>
 
-<input id="msg" placeholder="Type message...">
-<button onclick="sendMsg()">Send</button>
-
-<br><br>
-
-<button onclick="start()">Start Chat</button>
-<button onclick="next()">Next Stranger</button>
+<input id="msg" placeholder="Type message">
+<button onclick="send()">Send</button>
 
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
@@ -67,89 +77,81 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
 };
 
 firebase.initializeApp(firebaseConfig);
+
 var db = firebase.firestore();
 
-let myId = Math.random().toString(36).substring(2);
-let room = null;
+let currentRoom = null;
 
-function start(){
+function createRoom(){
 
-document.getElementById("status").innerText="Looking for stranger...";
+let roomId = "room_"+Math.floor(Math.random()*100000);
 
-db.collection("waiting").doc(myId).set({
-online:true
+db.collection("rooms").doc(roomId).set({
+created:Date.now()
 });
 
-db.collection("waiting").get().then(snapshot=>{
+joinRoom(roomId);
 
-if(snapshot.size>1){
+}
+
+function loadRooms(){
+
+db.collection("rooms").onSnapshot(snapshot=>{
+
+let html="";
 
 snapshot.forEach(doc=>{
 
-if(doc.id!=myId && !room){
+html += "<p>"+doc.id+" <button onclick='joinRoom(\""+doc.id+"\")'>Join</button></p>";
 
-room="room_"+doc.id+"_"+myId;
+});
 
-db.collection("waiting").doc(doc.id).delete();
-db.collection("waiting").doc(myId).delete();
-
-connectRoom();
-
-}
+document.getElementById("rooms").innerHTML = html;
 
 });
 
 }
 
+function joinRoom(roomId){
+
+currentRoom = roomId;
+
+document.getElementById("roomTitle").innerText = "Room: "+roomId;
+
+db.collection("rooms").doc(roomId).collection("messages")
+.orderBy("time")
+.onSnapshot(snapshot=>{
+
+let chat="";
+
+snapshot.forEach(doc=>{
+
+chat += "<p>"+doc.data().text+"</p>";
+
+});
+
+document.getElementById("chat").innerHTML = chat;
+
 });
 
 }
 
-function connectRoom(){
+function send(){
 
-document.getElementById("status").innerText="Connected to stranger";
+let m = document.getElementById("msg").value;
 
-db.collection("rooms").doc(room).onSnapshot(doc=>{
+db.collection("rooms").doc(currentRoom).collection("messages").add({
 
-let data=doc.data();
-
-if(data && data.msg){
-add("Stranger: "+data.msg);
-}
+text:m,
+time:Date.now()
 
 });
-
-}
-
-function sendMsg(){
-
-let m=document.getElementById("msg").value;
-
-db.collection("rooms").doc(room).set({
-msg:m
-});
-
-add("You: "+m);
 
 document.getElementById("msg").value="";
 
 }
 
-function add(t){
-
-let c=document.getElementById("chat");
-
-c.innerHTML+="<p>"+t+"</p>";
-
-c.scrollTop=c.scrollHeight;
-
-}
-
-function next(){
-
-location.reload();
-
-}
+loadRooms();
 
 </script>
 
