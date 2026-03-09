@@ -5,61 +5,69 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Stealth Chat & Voice</title>
 <style>
-    body { margin: 0; font-family: Arial, sans-serif; background: #0e0e0e; color: #f5f5f5; }
-    .hidden { display: none; }
-    #login { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
-    input, button { margin: 5px; padding: 10px; border-radius: 5px; border: none; }
-    button { background: #1f1f1f; color: #f5f5f5; cursor: pointer; }
-    button:hover { background: #333; }
-    #rooms { padding: 20px; }
-    .room { padding: 10px; margin: 5px; border: 1px solid #444; cursor: pointer; border-radius: 5px; display: flex; justify-content: space-between; }
-    #chatBox, #voiceBox { position: fixed; bottom: 20px; right: 20px; width: 300px; height: 400px; background: #1c1c1c; border-radius: 10px; display: flex; flex-direction: column; }
-    #messages { flex: 1; overflow-y: auto; padding: 10px; }
-    #newMessage { display: flex; }
-    #newMessage input { flex: 1; }
-    #usersList { font-size: 12px; }
+  body {
+    margin: 0; font-family: Arial, sans-serif; background: #111; color: #eee;
+  }
+  #container { display: flex; flex-direction: column; align-items: center; padding: 20px; }
+  h1 { color: #0f0; text-shadow: 0 0 5px #0f0; }
+  input, button { padding: 10px; margin: 5px; border-radius: 5px; border: none; }
+  input { width: 200px; }
+  button { cursor: pointer; background: #222; color: #0f0; }
+  button:hover { background: #333; }
+  #roomsList { margin-top: 20px; width: 100%; max-width: 400px; }
+  .roomItem { padding: 10px; margin: 5px 0; background: #222; border-radius: 5px; display: flex; justify-content: space-between; cursor: pointer; }
+  .locked { font-weight: bold; }
+  #chatBox, #voiceBox { display: none; flex-direction: column; align-items: stretch; width: 100%; max-width: 500px; margin-top: 20px; }
+  #messages { background: #111; height: 300px; overflow-y: auto; border: 1px solid #0f0; padding: 10px; margin-bottom: 10px; border-radius: 5px; }
+  .message { margin: 5px 0; }
+  #imageInput, #fileInput { margin: 5px 0; }
 </style>
 </head>
 <body>
+<div id="container">
+  <h1>Stealth Chat & Voice</h1>
+  
+  <!-- Username -->
+  <input type="text" id="username" placeholder="Enter your username">
+  <button id="setUsernameBtn">Set Username</button>
 
-<div id="login">
-    <h1>Stealth Chat</h1>
-    <input id="usernameInput" placeholder="Enter your username" />
-    <button id="loginBtn">Login</button>
-</div>
+  <!-- Room Controls -->
+  <input type="text" id="roomName" placeholder="Room Name">
+  <input type="text" id="roomPassword" placeholder="Password (optional)">
+  <select id="roomType">
+    <option value="chat">Chat Room</option>
+    <option value="voice">Voice Room</option>
+  </select>
+  <button id="createRoomBtn">Create Room</button>
+  <button id="viewRoomsBtn">View Rooms</button>
 
-<div id="rooms" class="hidden">
-    <h2>Rooms</h2>
-    <div id="roomsList"></div>
-    <input id="newRoomName" placeholder="New room name" />
-    <input id="newRoomPass" placeholder="Password (optional)" />
-    <select id="roomType"><option value="chat">Chat</option><option value="voice">Voice</option></select>
-    <button id="createRoomBtn">Create Room</button>
-</div>
+  <!-- Room List -->
+  <div id="roomsList"></div>
 
-<div id="chatBox" class="hidden">
+  <!-- Chat Box -->
+  <div id="chatBox">
     <div id="messages"></div>
-    <div id="newMessage">
-        <input id="messageInput" placeholder="Type a message" />
-        <input type="file" id="imageInput" />
-        <button id="sendBtn">Send</button>
-    </div>
-    <button id="leaveChatBtn">Leave Room</button>
-</div>
+    <input type="text" id="chatInput" placeholder="Type a message">
+    <input type="file" id="imageInput" accept="image/*">
+    <input type="file" id="fileInput">
+    <button id="sendBtn">Send</button>
+    <button id="leaveBtn">Leave Room</button>
+  </div>
 
-<div id="voiceBox" class="hidden">
-    <h3>Voice Room</h3>
-    <div id="usersList"></div>
-    <button id="leaveVoiceBtn">Leave Room</button>
+  <!-- Voice Box -->
+  <div id="voiceBox">
+    <audio id="localAudio" autoplay muted></audio>
+    <div id="remoteAudios"></div>
+    <button id="leaveVoiceBtn">Leave Voice Room</button>
+  </div>
 </div>
 
 <!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 
 <script>
-// Firebase config
+  // 🔑 Replace with your Firebase config
 const firebaseConfig = {
 apiKey: "AIzaSyC3zgBQLFgUhHHJPlTNeyGobAilCVPEvBk",
 authDomain: "random-chat-2ed9a.firebaseapp.com",
@@ -67,195 +75,111 @@ projectId: "random-chat-2ed9a",
 storageBucket: "random-chat-2ed9a.firebasestorage.app",
 messagingSenderId: "608975566065",
 appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
-};
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
-const storage = firebase.storage();
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
 
-let username = '';
-let currentRoom = null;
-let currentRoomType = null;
-let localStream = null;
-let peers = {};
+  let username = "";
+  let currentRoom = "";
+  let currentType = "";
+  let localStream = null;
+  const peers = {};
 
-// Login
-document.getElementById('loginBtn').onclick = () => {
-    const name = document.getElementById('usernameInput').value.trim();
-    if (!name) return alert('Enter username');
-    username = name;
-    document.getElementById('login').classList.add('hidden');
-    document.getElementById('rooms').classList.remove('hidden');
-    loadRooms();
-};
+  document.getElementById("setUsernameBtn").onclick = () => {
+    const val = document.getElementById("username").value.trim();
+    if(val) { username = val; alert("Username set: " + username); }
+  };
 
-// Load rooms
-function loadRooms() {
-    db.ref('rooms').on('value', snapshot => {
-        const roomsList = document.getElementById('roomsList');
-        roomsList.innerHTML = '';
-        const rooms = snapshot.val() || {};
-        for (let key in rooms) {
-            const room = rooms[key];
-            const div = document.createElement('div');
-            div.className = 'room';
-            div.textContent = room.name + (room.password ? ' 🔒' : '');
-            div.onclick = () => joinRoom(key, room);
-            roomsList.appendChild(div);
-        }
+  // Create room
+  document.getElementById("createRoomBtn").onclick = () => {
+    const name = document.getElementById("roomName").value.trim();
+    const pass = document.getElementById("roomPassword").value.trim();
+    const type = document.getElementById("roomType").value;
+    if(!name) return alert("Enter a room name");
+    db.ref("rooms/"+name).set({ password: pass, type });
+    alert("Room created: " + name);
+  };
+
+  // View rooms
+  document.getElementById("viewRoomsBtn").onclick = () => {
+    db.ref("rooms").once("value", snap => {
+      const roomsList = document.getElementById("roomsList");
+      roomsList.innerHTML = "";
+      snap.forEach(child => {
+        const room = child.key;
+        const data = child.val();
+        const div = document.createElement("div");
+        div.className = "roomItem";
+        div.innerHTML = data.password ? `${room} 🔒` : room;
+        div.onclick = () => joinRoom(room, data.type, data.password);
+        roomsList.appendChild(div);
+      });
     });
-}
+  };
 
-// Create room
-document.getElementById('createRoomBtn').onclick = () => {
-    const name = document.getElementById('newRoomName').value.trim();
-    if (!name) return alert('Enter room name');
-    const type = document.getElementById('roomType').value;
-    const password = document.getElementById('newRoomPass').value;
-    const newRoomRef = db.ref('rooms').push();
-    newRoomRef.set({ name, type, password: password || '' });
-    document.getElementById('newRoomName').value = '';
-    document.getElementById('newRoomPass').value = '';
-};
-
-// Join room
-async function joinRoom(roomId, room) {
-    if (room.password) {
-        const pass = prompt('Enter room password:');
-        if (pass !== room.password) return alert('Wrong password');
+  function joinRoom(name, type, pass) {
+    if(pass) {
+      const entered = prompt("Enter password for " + name);
+      if(entered !== pass) return alert("Wrong password!");
     }
-    leaveRoom();
-    currentRoom = roomId;
-    currentRoomType = room.type;
+    currentRoom = name;
+    currentType = type;
+    document.getElementById("chatBox").style.display = type==="chat"?"flex":"none";
+    document.getElementById("voiceBox").style.display = type==="voice"?"flex":"none";
+    if(type==="chat") initChat();
+    if(type==="voice") initVoice();
+  }
 
-    if (room.type === 'chat') {
-        document.getElementById('chatBox').classList.remove('hidden');
-        loadMessages(roomId);
-    } else {
-        document.getElementById('voiceBox').classList.remove('hidden');
-        startVoice(roomId);
-    }
-}
+  // Leave room
+  document.getElementById("leaveBtn").onclick = () => {
+    currentRoom = ""; currentType = "";
+    document.getElementById("chatBox").style.display = "none";
+    document.getElementById("messages").innerHTML = "";
+  };
+  document.getElementById("leaveVoiceBtn").onclick = () => {
+    currentRoom = ""; currentType = "";
+    document.getElementById("voiceBox").style.display = "none";
+    if(localStream) localStream.getTracks().forEach(t=>t.stop());
+  };
 
-// Leave room
-function leaveRoom() {
-    if (!currentRoom) return;
-    if (currentRoomType === 'chat') {
-        document.getElementById('chatBox').classList.add('hidden');
-    } else {
-        document.getElementById('voiceBox').classList.add('hidden');
-        stopVoice();
-    }
-    currentRoom = null;
-    currentRoomType = null;
-}
-
-document.getElementById('leaveChatBtn').onclick = leaveRoom;
-document.getElementById('leaveVoiceBtn').onclick = leaveRoom;
-
-// Chat messages
-function loadMessages(roomId) {
-    const messagesDiv = document.getElementById('messages');
-    messagesDiv.innerHTML = '';
-    db.ref('messages/' + roomId).on('child_added', snapshot => {
-        const msg = snapshot.val();
-        const div = document.createElement('div');
-        if (msg.image) {
-            div.innerHTML = `<b>${msg.user}:</b><br/><img src="${msg.image}" style="max-width:100%;"/>`;
-        } else {
-            div.innerHTML = `<b>${msg.user}:</b> ${msg.text}`;
-        }
+  // Chat functions
+  function initChat() {
+    const messagesDiv = document.getElementById("messages");
+    const chatInput = document.getElementById("chatInput");
+    const imageInput = document.getElementById("imageInput");
+    const fileInput = document.getElementById("fileInput");
+    document.getElementById("sendBtn").onclick = () => {
+      const text = chatInput.value.trim();
+      if(!text && !imageInput.files[0] && !fileInput.files[0]) return;
+      const msgRef = db.ref("messages/"+currentRoom).push();
+      if(text) msgRef.set({ user: username, text, time: Date.now() });
+      if(imageInput.files[0]) msgRef.set({ user: username, image: URL.createObjectURL(imageInput.files[0]), time: Date.now() });
+      if(fileInput.files[0]) msgRef.set({ user: username, file: URL.createObjectURL(fileInput.files[0]), name: fileInput.files[0].name, time: Date.now() });
+      chatInput.value = ""; imageInput.value=""; fileInput.value="";
+    };
+    db.ref("messages/"+currentRoom).on("value", snap => {
+      messagesDiv.innerHTML = "";
+      snap.forEach(c => {
+        const m = c.val();
+        const div = document.createElement("div");
+        div.className = "message";
+        if(m.text) div.textContent = `${m.user}: ${m.text}`;
+        if(m.image) { const img = document.createElement("img"); img.src=m.image; img.style.maxWidth="100%"; div.appendChild(img);}
+        if(m.file) { const a = document.createElement("a"); a.href=m.file; a.textContent=m.name; a.download=m.name; div.appendChild(a);}
         messagesDiv.appendChild(div);
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      });
     });
-}
+  }
 
-document.getElementById('sendBtn').onclick = async () => {
-    const input = document.getElementById('messageInput');
-    const fileInput = document.getElementById('imageInput');
-    let msg = { user: username, text: input.value, image: '' };
+  // Voice functions
+  async function initVoice() {
+    if(!navigator.mediaDevices) return alert("Voice not supported");
+    localStream = await navigator.mediaDevices.getUserMedia({ audio:true });
+    document.getElementById("localAudio").srcObject = localStream;
+    // For simplicity: just local audio here. Full peer-to-peer needs WebRTC + signaling in Firebase
+  }
 
-    if (fileInput.files[0]) {
-        const file = fileInput.files[0];
-        const storageRef = storage.ref('images/' + Date.now() + '_' + file.name);
-        await storageRef.put(file);
-        msg.image = await storageRef.getDownloadURL();
-        fileInput.value = '';
-    }
-
-    if (!msg.text && !msg.image) return;
-    db.ref('messages/' + currentRoom).push(msg);
-    input.value = '';
-};
-
-// Voice Chat with WebRTC
-async function startVoice(roomId) {
-    localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    db.ref('voice/' + roomId).on('child_added', async snapshot => {
-        const data = snapshot.val();
-        if (data.user === username) return;
-        if (data.offer && !peers[data.user]) await handleOffer(data.offer, data.user, roomId);
-        if (data.answer && peers[data.user]) await handleAnswer(data.answer, data.user);
-        if (data.candidate && peers[data.user]) await handleCandidate(data.candidate, data.user);
-    });
-
-    db.ref('voice/' + roomId + '/users/' + username).set(true);
-    updateUsersList(roomId);
-}
-
-function stopVoice() {
-    for (let peer in peers) {
-        peers[peer].close();
-    }
-    peers = {};
-    if (localStream) {
-        localStream.getTracks().forEach(track => track.stop());
-    }
-    if (currentRoom) db.ref('voice/' + currentRoom + '/users/' + username).remove();
-}
-
-function updateUsersList(roomId) {
-    db.ref('voice/' + roomId + '/users').on('value', snapshot => {
-        const users = snapshot.val() || {};
-        document.getElementById('usersList').innerHTML = Object.keys(users).join('<br/>');
-    });
-}
-
-async function handleOffer(offer, user, roomId) {
-    const pc = new RTCPeerConnection();
-    peers[user] = pc;
-    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-
-    pc.onicecandidate = e => { if (e.candidate) sendCandidate(e.candidate, user, roomId); };
-    pc.ontrack = e => playAudio(e.streams[0], user);
-
-    await pc.setRemoteDescription(new RTCSessionDescription(offer));
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    db.ref('voice/' + roomId + '/signals/' + user).push({ answer, user: username });
-}
-
-async function handleAnswer(answer, user) {
-    await peers[user].setRemoteDescription(new RTCSessionDescription(answer));
-}
-
-async function handleCandidate(candidate, user) {
-    await peers[user].addIceCandidate(new RTCIceCandidate(candidate));
-}
-
-function sendCandidate(candidate, user, roomId) {
-    db.ref('voice/' + roomId + '/signals/' + user).push({ candidate, user: username });
-}
-
-function playAudio(stream, user) {
-    let audio = document.getElementById('audio_' + user);
-    if (!audio) {
-        audio = document.createElement('audio');
-        audio.id = 'audio_' + user;
-        audio.autoplay = true;
-        document.body.appendChild(audio);
-    }
-    audio.srcObject = stream;
-}
 </script>
 </body>
 </html>
