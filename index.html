@@ -1,127 +1,49 @@
 <!DOCTYPE html>
 <html>
 <head>
-
-<title>Chat Rooms</title>
-
-<meta name="viewport" content="width=device-width, initial-scale=1">
-
+<title>Advanced Chat Rooms</title>
 <style>
-
-body{
-font-family:Arial;
-background:#0f0f0f;
-color:white;
-text-align:center;
-margin:0;
-}
-
-#container{
-max-width:800px;
-margin:auto;
-padding:10px;
-}
-
-#rooms{
-border:1px solid gray;
-background:#1a1a1a;
-padding:15px;
-margin-bottom:20px;
-}
-
-.room{
-padding:10px;
-border-bottom:1px solid gray;
-display:flex;
-justify-content:space-between;
-}
-
-#chat{
-border:1px solid gray;
-height:300px;
-overflow:auto;
-background:#1a1a1a;
-padding:10px;
-text-align:left;
-}
-
-#typing{
-color:#00ff9c;
-font-size:14px;
-}
-
-input{
-padding:8px;
-margin:5px;
-width:60%;
-}
-
-button{
-padding:8px 14px;
-cursor:pointer;
-}
-
-.message{
-margin:6px 0;
-display:flex;
-align-items:center;
-}
-
-.avatar{
-width:28px;
-height:28px;
-border-radius:50%;
-margin-right:8px;
-}
-
-@media (max-width:600px){
-
-input{
-width:90%;
-}
-
-}
-
+body{font-family:Arial;background:#0f0f0f;color:white;text-align:center;}
+#container{width:70%;margin:auto;}
+#rooms{border:1px solid gray;background:#1a1a1a;padding:15px;margin-bottom:20px;}
+.room{padding:10px;border-bottom:1px solid gray;}
+#chat{border:1px solid gray;height:300px;overflow:auto;background:#1a1a1a;padding:10px;}
+input{padding:8px;margin:5px;}
+button{padding:8px 14px;cursor:pointer;margin:3px;}
+#online{margin:10px;color:#00ff9c;}
+.fileInput{display:none;}
 </style>
-
 </head>
-
 <body>
 
-<h2>Public Chat Rooms</h2>
+<h1>Advanced Chat Rooms</h1>
+<div id="online">Users online: 0</div>
 
 <div id="container">
-
-<input id="username" placeholder="Username">
-
-<br>
-
+<input id="username" placeholder="Username"><br>
 <input id="roomName" placeholder="Room name">
-<input id="roomPass" placeholder="Password (optional)">
+<input id="roomPassword" placeholder="Optional password">
 <button onclick="createRoom()">Create Room</button>
 
 <h3>Rooms</h3>
-
 <div id="rooms"></div>
 
 <h3 id="roomTitle"></h3>
-
 <div id="chat"></div>
 
-<div id="typing"></div>
-
-<br>
-
-<input id="msg" placeholder="Message" oninput="typing()">
+<input id="msg" placeholder="Message">
 <button onclick="send()">Send</button>
-
+<button onclick="startVoice()">Start Voice Chat</button>
+<input type="file" id="fileInput" class="fileInput" onchange="sendFile(event)">
+<button onclick="document.getElementById('fileInput').click()">Send Image/File</button>
+<p id="typing"></p>
 </div>
 
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-storage.js"></script>
 
 <script>
-
 const firebaseConfig = {
 apiKey: "AIzaSyC3zgBQLFgUhHHJPlTNeyGobAilCVPEvBk",
 authDomain: "random-chat-2ed9a.firebaseapp.com",
@@ -130,216 +52,159 @@ storageBucket: "random-chat-2ed9a.firebasestorage.app",
 messagingSenderId: "608975566065",
 appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
 };
-
 firebase.initializeApp(firebaseConfig);
-
 var db=firebase.firestore();
+var storage=firebase.storage();
 
 let userId=Math.random().toString(36).substring(2);
 let currentRoom=null;
+let localStream=null;
+let peerConnection=null;
+const badWords=["fuck","shit","bitch","ass"];
 
-function avatar(name){
-return "https://api.dicebear.com/7.x/identicon/svg?seed="+name;
+// Typing indicator
+let typingTimeout=null;
+document.getElementById("msg").addEventListener("input",()=>{
+    if(currentRoom){
+        db.collection("rooms").doc(currentRoom).collection("typing").doc(userId).set({typing:true});
+        clearTimeout(typingTimeout);
+        typingTimeout=setTimeout(()=>{db.collection("rooms").doc(currentRoom).collection("typing").doc(userId).delete()},2000);
+    }
+});
+
+// Swear filter
+function filter(text){badWords.forEach(word=>{text=text.replace(new RegExp(word,"gi"),"****");}); return text;}
+
+// Online users
+function updateOnline(){
+    db.collection("online").doc(userId).set({time:Date.now()});
+    db.collection("online").onSnapshot(s=>{
+        document.getElementById("online").innerText="Users online: "+s.size;
+    });
 }
 
+// Room creation
 function createRoom(){
-
-let name=document.getElementById("roomName").value.trim();
-let pass=document.getElementById("roomPass").value;
-
-if(!name)return;
-
-db.collection("rooms").doc(name).set({
-users:0,
-password:pass
-});
-
-joinRoom(name);
-
+    let name=document.getElementById("roomName").value.trim();
+    if(!name)return alert("Enter room name");
+    let password=document.getElementById("roomPassword").value;
+    db.collection("rooms").doc(name).set({users:0,password:password||""});
+    joinRoom(name,password);
 }
 
+// Load rooms
 function loadRooms(){
-
-db.collection("rooms").onSnapshot(snapshot=>{
-
-let html="";
-
-snapshot.forEach(doc=>{
-
-let data=doc.data();
-
-html+=`
-<div class="room">
-<span>${doc.id} (${data.users || 0})</span>
-<button onclick="joinRoom('${doc.id}')">Join</button>
-</div>
-`;
-
-});
-
-document.getElementById("rooms").innerHTML=html;
-
-});
-
+    db.collection("rooms").onSnapshot(snapshot=>{
+        let html="";
+        snapshot.forEach(doc=>{
+            let room=doc.id;
+            let data=doc.data();
+            html+=`<div class="room"><b>${room}</b> (${data.users||0} users)
+            <button onclick="promptJoin('${room}')">Join</button></div>`;
+        });
+        document.getElementById("rooms").innerHTML=html;
+    });
 }
 
+// Join room with password
+function promptJoin(room){
+    db.collection("rooms").doc(room).get().then(doc=>{
+        if(!doc.exists)return alert("Room not found");
+        let pass=doc.data().password;
+        if(pass){
+            let input=prompt("Room is password protected. Enter password:");
+            if(input!==pass)return alert("Wrong password");
+        }
+        joinRoom(room);
+    });
+}
+
+// Join room logic
 function joinRoom(room){
-
-if(currentRoom)return;
-
-let ref=db.collection("rooms").doc(room);
-
-ref.get().then(doc=>{
-
-let data=doc.data();
-
-if(data.password){
-
-let entered=prompt("Room password:");
-
-if(entered!==data.password){
-
-alert("Wrong password");
-
-return;
-
+    currentRoom=room;
+    document.getElementById("roomTitle").innerText="Room: "+room;
+    let roomRef=db.collection("rooms").doc(room);
+    roomRef.update({users:firebase.firestore.FieldValue.increment(1)});
+    // Messages
+    roomRef.collection("messages").orderBy("time").onSnapshot(s=>{
+        let html="";
+        s.forEach(doc=>{
+            let msg=doc.data();
+            if(msg.fileURL) html+=`<p><b>${msg.sender}</b>: <a href="${msg.fileURL}" target="_blank">File</a></p>`;
+            else html+=`<p>${msg.sender}: ${msg.text}</p>`;
+        });
+        document.getElementById("chat").innerHTML=html;
+        // Notifications
+        s.forEach(doc=>{if(doc.data().sender!==document.getElementById("username").value) new Notification("New Message","Body: "+doc.data().text);});
+    });
+    // Typing indicator
+    roomRef.collection("typing").onSnapshot(s=>{
+        let names=[];
+        s.forEach(doc=>{if(doc.id!==userId)names.push(doc.id)});
+        document.getElementById("typing").innerText=names.length?names.join(", ")+" is typing...":'';
+    });
+    // Add user doc
+    roomRef.collection("users").doc(userId).set({joined:Date.now()});
 }
 
-}
-
-currentRoom=room;
-
-document.getElementById("roomTitle").innerText="Room: "+room;
-
-ref.update({
-users:firebase.firestore.FieldValue.increment(1)
-});
-
-ref.collection("messages")
-.orderBy("time")
-.onSnapshot(snapshot=>{
-
-let html="";
-
-snapshot.forEach(doc=>{
-
-let d=doc.data();
-
-html+=`
-<div class="message">
-<img class="avatar" src="${avatar(d.user)}">
-<span><b>${d.user}</b>: ${d.text}</span>
-</div>
-`;
-
-});
-
-document.getElementById("chat").innerHTML=html;
-
-});
-
-});
-
-}
-
+// Send message
 function send(){
+    if(!currentRoom)return;
+    let name=document.getElementById("username").value||"Anonymous";
+    let message=filter(document.getElementById("msg").value);
+    if(!message)return;
+    db.collection("rooms").doc(currentRoom).collection("messages").add({text:message,sender:name,time:Date.now()});
+    document.getElementById("msg").value="";
+}
 
-if(!currentRoom)return;
+// Send file/image
+function sendFile(event){
+    if(!currentRoom)return;
+    let file=event.target.files[0];
+    if(!file)return;
+    let name=file.name;
+    let storageRef=storage.ref("files/"+Date.now()+"_"+name);
+    storageRef.put(file).then(snapshot=>snapshot.ref.getDownloadURL().then(url=>{
+        let sender=document.getElementById("username").value||"Anonymous";
+        db.collection("rooms").doc(currentRoom).collection("messages").add({fileURL:url,sender:sender,time:Date.now()});
+    }));
+}
 
-let name=document.getElementById("username").value||"Anonymous";
-let message=document.getElementById("msg").value;
-
-db.collection("rooms")
-.doc(currentRoom)
-.collection("messages")
-.add({
-user:name,
-text:message,
-time:Date.now()
+// Leave room logic
+window.addEventListener("beforeunload",()=>{
+    db.collection("online").doc(userId).delete();
+    if(currentRoom){
+        let roomRef=db.collection("rooms").doc(currentRoom);
+        roomRef.collection("users").doc(userId).delete().then(()=>{
+            roomRef.collection("users").get().then(s=>{
+                if(s.size===0)roomRef.delete();
+                else roomRef.update({users:s.size});
+            });
+        });
+    }
 });
 
-document.getElementById("msg").value="";
-
+// Voice chat
+async function startVoice(){
+    if(!currentRoom)return alert("Join a room first");
+    localStream=await navigator.mediaDevices.getUserMedia({audio:true});
+    peerConnection=new RTCPeerConnection();
+    localStream.getTracks().forEach(track=>peerConnection.addTrack(track,localStream));
+    peerConnection.ontrack=e=>{let audio=document.createElement("audio");audio.srcObject=e.streams[0];audio.autoplay=true;document.body.appendChild(audio);}
+    let offer=await peerConnection.createOffer();
+    await peerConnection.setLocalDescription(offer);
+    let roomRef=db.collection("rooms").doc(currentRoom).collection("voice").doc("offer");
+    await roomRef.set({sdp:offer.sdp});
+    roomRef.onSnapshot(async snap=>{
+        let data=snap.data();
+        if(data && data.answer){
+            await peerConnection.setRemoteDescription({type:"answer",sdp:data.answer});
+        }
+    });
+    peerConnection.onicecandidate=e=>{if(e.candidate)roomRef.update({ice:e.candidate})};
 }
-
-function typing(){
-
-if(!currentRoom)return;
-
-let name=document.getElementById("username").value||"Someone";
-
-db.collection("rooms")
-.doc(currentRoom)
-.collection("typing")
-.doc("status")
-.set({
-user:name,
-time:Date.now()
-});
-
-}
-
-function listenTyping(){
-
-if(!currentRoom)return;
-
-db.collection("rooms")
-.doc(currentRoom)
-.collection("typing")
-.doc("status")
-.onSnapshot(doc=>{
-
-if(doc.exists){
-
-let data=doc.data();
-
-document.getElementById("typing").innerText=data.user+" is typing...";
-
-setTimeout(()=>{
-
-document.getElementById("typing").innerText="";
-
-},2000);
-
-}
-
-});
-
-}
-
-function leaveRoom(){
-
-if(!currentRoom)return;
-
-let ref=db.collection("rooms").doc(currentRoom);
-
-ref.get().then(doc=>{
-
-if(doc.exists){
-
-let users=(doc.data().users||1)-1;
-
-if(users<=0){
-
-ref.delete();
-
-}else{
-
-ref.update({users:users});
-
-}
-
-}
-
-});
-
-}
-
-window.addEventListener("beforeunload",leaveRoom);
-
 loadRooms();
-
+updateOnline();
 </script>
-
 </body>
 </html>
