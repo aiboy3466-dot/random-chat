@@ -27,7 +27,7 @@
     transition: 0.2s;
   }
   #roomList div:hover { background: #222; }
-  #chatContainer, #voiceContainer, #userSetup {
+  #chatContainer, #voiceContainer, #userSetup, #createRoom {
     margin: 10px auto;
     width: 90%;
     max-width: 500px;
@@ -48,7 +48,7 @@
     max-width: 100%;
     border-radius: 4px;
   }
-  input, button { 
+  input, button, select { 
     background: #111; 
     color: #0ff; 
     border: 1px solid #0ff; 
@@ -69,7 +69,24 @@
   <button onclick="setUserName()">Enter</button>
 </div>
 
-<button id="showRoomsBtn" style="display:none;" onclick="loadRooms()">Show Rooms</button>
+<div id="mainMenu" style="display:none;">
+  <button onclick="showCreateRoom()">Create Room</button>
+  <button onclick="loadRooms()">Show Rooms</button>
+</div>
+
+<div id="createRoom">
+  <h3>Create a Room</h3>
+  <input type="text" id="roomNameInput" placeholder="Room name">
+  <select id="roomType">
+    <option value="public">Public</option>
+    <option value="private">Private</option>
+    <option value="voice">Voice Chat</option>
+  </select>
+  <input type="text" id="roomPassword" placeholder="Password for private" style="display:none;">
+  <button onclick="createRoom()">Create</button>
+  <button onclick="cancelCreateRoom()">Cancel</button>
+</div>
+
 <div id="roomList"></div>
 
 <div id="chatContainer">
@@ -93,7 +110,6 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 
 <script>
-  // ---- FIREBASE CONFIG ----
 const firebaseConfig = {
 apiKey: "AIzaSyC3zgBQLFgUhHHJPlTNeyGobAilCVPEvBk",
 authDomain: "random-chat-2ed9a.firebaseapp.com",
@@ -101,113 +117,162 @@ projectId: "random-chat-2ed9a",
 storageBucket: "random-chat-2ed9a.firebasestorage.app",
 messagingSenderId: "608975566065",
 appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
-  };
-  firebase.initializeApp(firebaseConfig);
-  const db = firebase.firestore();
-  const storage = firebase.storage();
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const storage = firebase.storage();
 
-  let currentRoom = null;
-  let chatUnsub = null;
-  let userName = null;
+let currentRoom = null;
+let chatUnsub = null;
+let userName = null;
 
-  // ---- USER SETUP ----
-  function setUserName(){
-    const input = document.getElementById("userNameInput");
-    if(input.value.trim() === "") return alert("Enter a valid name!");
-    userName = input.value.trim();
-    document.getElementById("userSetup").style.display = "none";
-    document.getElementById("showRoomsBtn").style.display = "inline-block";
-  }
+// ---- USER SETUP ----
+function setUserName(){
+  const input = document.getElementById("userNameInput");
+  if(input.value.trim() === "") return alert("Enter a valid name!");
+  userName = input.value.trim();
+  document.getElementById("userSetup").style.display = "none";
+  document.getElementById("mainMenu").style.display = "block";
+}
 
-  // ---- LOAD ROOMS ----
-  async function loadRooms(){
-    const roomListDiv = document.getElementById("roomList");
-    roomListDiv.innerHTML = "";
-    const snapshot = await db.collection("rooms").get();
-    snapshot.forEach(doc => {
-      const data = doc.data();
-      const div = document.createElement("div");
-      div.innerHTML = `<span>${data.name}</span>${data.private ? "🔒" : ""}`;
-      div.onclick = async () => {
-        if(data.private){
-          const pw = prompt("Enter password for " + data.name);
-          if(pw !== data.password) return alert("Wrong password!");
+// ---- SHOW CREATE ROOM ----
+function showCreateRoom(){
+  document.getElementById("createRoom").style.display = "block";
+}
+function cancelCreateRoom(){
+  document.getElementById("createRoom").style.display = "none";
+}
+
+// ---- ROOM PASSWORD FIELD TOGGLE ----
+document.getElementById("roomType").addEventListener("change", ()=>{
+  const pwInput = document.getElementById("roomPassword");
+  if(document.getElementById("roomType").value === "private") pwInput.style.display = "inline-block";
+  else pwInput.style.display = "none";
+});
+
+// ---- CREATE ROOM ----
+async function createRoom(){
+  const name = document.getElementById("roomNameInput").value.trim();
+  const type = document.getElementById("roomType").value;
+  const password = document.getElementById("roomPassword").value.trim();
+  if(!name) return alert("Room needs a name!");
+  const roomRef = db.collection("rooms").doc(name);
+  const snap = await roomRef.get();
+  if(snap.exists) return alert("Room already exists!");
+  await roomRef.set({
+    name: name,
+    type: type,
+    private: type==="private",
+    password: password || ""
+  });
+  alert("Room created!");
+  document.getElementById("createRoom").style.display = "none";
+  loadRooms();
+}
+
+// ---- LOAD ROOMS ----
+async function loadRooms(){
+  const roomListDiv = document.getElementById("roomList");
+  roomListDiv.innerHTML = "";
+  const snapshot = await db.collection("rooms").get();
+  snapshot.forEach(doc=>{
+    const data = doc.data();
+    const div = document.createElement("div");
+    let lock = data.private ? "🔒" : "";
+    div.innerHTML = `<span>${data.name} (${data.type})</span> ${lock}`;
+    div.onclick = async ()=>{
+      if(data.private){
+        const pw = prompt("Enter password for " + data.name);
+        if(pw !== data.password) return alert("Wrong password!");
+      }
+      if(data.type==="voice") joinVoiceRoom(data.name);
+      else joinChatRoom(data.name);
+    };
+    roomListDiv.appendChild(div);
+  });
+}
+
+// ---- JOIN CHAT ROOM ----
+function joinChatRoom(roomName){
+  leaveRoom();
+  currentRoom = roomName;
+  document.getElementById("chatRoomName").innerText = roomName;
+  document.getElementById("chatContainer").style.display = "block";
+  const msgDiv = document.getElementById("messages");
+  msgDiv.innerHTML = "";
+  chatUnsub = db.collection("rooms").doc(roomName).collection("messages").orderBy("time")
+    .onSnapshot(snapshot=>{
+      msgDiv.innerHTML = "";
+      snapshot.forEach(doc=>{
+        const m = doc.data();
+        const div = document.createElement("div");
+        if(m.type==="text") div.textContent = m.sender+": "+m.text;
+        else if(m.type==="image"){
+          const img = document.createElement("img");
+          img.src = m.url;
+          div.appendChild(img);
         }
-        joinChatRoom(data.name);
-      };
-      roomListDiv.appendChild(div);
+        msgDiv.appendChild(div);
+      });
+      msgDiv.scrollTop = msgDiv.scrollHeight;
     });
+}
+
+// ---- SEND MESSAGE ----
+async function sendMessage(){
+  if(!currentRoom) return;
+  const msgInput = document.getElementById("msgInput");
+  const imageInput = document.getElementById("imageInput");
+
+  if(imageInput.files[0]){
+    const file = imageInput.files[0];
+    const ref = storage.ref().child('images/'+Date.now()+"_"+file.name);
+    await ref.put(file);
+    const url = await ref.getDownloadURL();
+    db.collection("rooms").doc(currentRoom).collection("messages").add({
+      type:"image",
+      url:url,
+      sender:userName,
+      time:Date.now()
+    });
+    imageInput.value="";
   }
 
-  // ---- JOIN CHAT ROOM ----
-  function joinChatRoom(roomName){
-    leaveRoom(); // remove previous box
-    currentRoom = roomName;
-    document.getElementById("chatRoomName").innerText = roomName;
-    document.getElementById("chatContainer").style.display = "block";
-    const msgDiv = document.getElementById("messages");
-    msgDiv.innerHTML = "";
-
-    // Listen to messages
-    chatUnsub = db.collection("rooms").doc(roomName).collection("messages").orderBy("time")
-      .onSnapshot(snapshot => {
-        msgDiv.innerHTML = "";
-        snapshot.forEach(doc => {
-          const m = doc.data();
-          const div = document.createElement("div");
-          if(m.type === "text") div.textContent = m.sender + ": " + m.text;
-          else if(m.type === "image"){
-            const img = document.createElement("img");
-            img.src = m.url;
-            div.appendChild(img);
-          }
-          msgDiv.appendChild(div);
-        });
-        msgDiv.scrollTop = msgDiv.scrollHeight;
-      });
+  if(msgInput.value.trim()!==""){
+    db.collection("rooms").doc(currentRoom).collection("messages").add({
+      type:"text",
+      text:msgInput.value,
+      sender:userName,
+      time:Date.now()
+    });
+    msgInput.value="";
   }
+}
 
-  // ---- SEND MESSAGE ----
-  async function sendMessage(){
-    if(!currentRoom) return;
-    const msgInput = document.getElementById("msgInput");
-    const imageInput = document.getElementById("imageInput");
+// ---- JOIN VOICE ROOM ----
+async function joinVoiceRoom(roomName){
+  leaveRoom();
+  currentRoom = roomName;
+  document.getElementById("voiceRoomName").innerText = roomName;
+  document.getElementById("voiceContainer").style.display = "block";
+  const localAudio = document.getElementById("localAudio");
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+    localAudio.srcObject = stream;
+    // In a real app you'd use WebRTC for voice streaming
+    alert("Voice chat ready (demo only: local audio). WebRTC needed for real connection.");
+  }catch(e){ alert("Microphone access denied"); }
+}
 
-    if(imageInput.files[0]){
-      const file = imageInput.files[0];
-      const ref = storage.ref().child('images/'+Date.now()+"_"+file.name);
-      await ref.put(file);
-      const url = await ref.getDownloadURL();
-      db.collection("rooms").doc(currentRoom).collection("messages").add({
-        type: "image",
-        url: url,
-        sender: userName,
-        time: Date.now()
-      });
-      imageInput.value = "";
-    }
-
-    if(msgInput.value.trim() !== ""){
-      db.collection("rooms").doc(currentRoom).collection("messages").add({
-        type: "text",
-        text: msgInput.value,
-        sender: userName,
-        time: Date.now()
-      });
-      msgInput.value = "";
-    }
-  }
-
-  // ---- LEAVE ROOM ----
-  function leaveRoom(){
-    if(chatUnsub) chatUnsub(); 
-    chatUnsub = null;
-    currentRoom = null;
-    document.getElementById("chatContainer").style.display = "none";
-    document.getElementById("voiceContainer").style.display = "none";
-  }
+// ---- LEAVE ROOM ----
+function leaveRoom(){
+  if(chatUnsub) chatUnsub(); 
+  chatUnsub = null;
+  currentRoom=null;
+  document.getElementById("chatContainer").style.display="none";
+  document.getElementById("voiceContainer").style.display="none";
+}
 
 </script>
-
 </body>
 </html>
