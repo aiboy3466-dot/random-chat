@@ -7,37 +7,48 @@
 
 body{
 font-family:Arial;
-background:#111;
+background:#0f0f0f;
 color:white;
 text-align:center;
 }
 
+h1{
+margin-top:30px;
+}
+
 #rooms{
-border:1px solid gray;
 width:60%;
 margin:auto;
 padding:10px;
-margin-bottom:20px;
+border:1px solid gray;
+background:#1a1a1a;
 }
 
 #chat{
-border:1px solid gray;
 width:60%;
-height:250px;
+height:300px;
 margin:auto;
 overflow:auto;
+border:1px solid gray;
 padding:10px;
 background:#1a1a1a;
 }
 
 button{
-padding:8px;
+padding:8px 12px;
 margin:5px;
+cursor:pointer;
 }
 
 input{
 padding:8px;
 width:50%;
+}
+
+.room{
+margin:10px;
+padding:10px;
+border-bottom:1px solid gray;
 }
 
 </style>
@@ -65,9 +76,7 @@ width:50%;
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
 
-<script>
-
-const firebaseConfig = {
+<script>const firebaseConfig = {
 apiKey: "AIzaSyC3zgBQLFgUhHHJPlTNeyGobAilCVPEvBk",
 authDomain: "random-chat-2ed9a.firebaseapp.com",
 projectId: "random-chat-2ed9a",
@@ -80,13 +89,33 @@ firebase.initializeApp(firebaseConfig);
 
 var db = firebase.firestore();
 
+let userId = Math.random().toString(36).substring(2);
 let currentRoom = null;
+
+const badWords = ["fuck","shit","bitch","ass"];
+
+function filter(text){
+
+let clean = text;
+
+badWords.forEach(word=>{
+
+let reg = new RegExp(word,"gi");
+
+clean = clean.replace(reg,"****");
+
+});
+
+return clean;
+
+}
 
 function createRoom(){
 
 let roomId = "room_"+Math.floor(Math.random()*100000);
 
 db.collection("rooms").doc(roomId).set({
+users:1,
 created:Date.now()
 });
 
@@ -102,7 +131,15 @@ let html="";
 
 snapshot.forEach(doc=>{
 
-html += "<p>"+doc.id+" <button onclick='joinRoom(\""+doc.id+"\")'>Join</button></p>";
+let data = doc.data();
+
+html += `
+<div class="room">
+<b>${doc.id}</b>  
+(${data.users || 0} users)
+<button onclick="joinRoom('${doc.id}')">Join</button>
+</div>
+`;
 
 });
 
@@ -116,9 +153,15 @@ function joinRoom(roomId){
 
 currentRoom = roomId;
 
-document.getElementById("roomTitle").innerText = "Room: "+roomId;
+document.getElementById("roomTitle").innerText="Room: "+roomId;
 
-db.collection("rooms").doc(roomId).collection("messages")
+let roomRef = db.collection("rooms").doc(roomId);
+
+roomRef.update({
+users:firebase.firestore.FieldValue.increment(1)
+});
+
+roomRef.collection("messages")
 .orderBy("time")
 .onSnapshot(snapshot=>{
 
@@ -138,11 +181,18 @@ document.getElementById("chat").innerHTML = chat;
 
 function send(){
 
-let m = document.getElementById("msg").value;
+if(!currentRoom) return;
 
-db.collection("rooms").doc(currentRoom).collection("messages").add({
+let message = document.getElementById("msg").value;
 
-text:m,
+message = filter(message);
+
+db.collection("rooms")
+.doc(currentRoom)
+.collection("messages")
+.add({
+
+text:message,
 time:Date.now()
 
 });
@@ -150,6 +200,36 @@ time:Date.now()
 document.getElementById("msg").value="";
 
 }
+
+window.addEventListener("beforeunload",()=>{
+
+if(currentRoom){
+
+let roomRef = db.collection("rooms").doc(currentRoom);
+
+roomRef.get().then(doc=>{
+
+if(doc.exists){
+
+let users = doc.data().users-1;
+
+if(users<=0){
+
+roomRef.delete();
+
+}else{
+
+roomRef.update({users:users});
+
+}
+
+}
+
+});
+
+}
+
+});
 
 loadRooms();
 
