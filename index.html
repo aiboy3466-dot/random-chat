@@ -5,111 +5,61 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Stealth Chat & Voice</title>
 <style>
-  body {
-    background: #111;
-    color: #0ff;
-    font-family: 'Segoe UI', sans-serif;
-    margin: 0;
-    padding: 0;
-    text-align: center;
-  }
-  h2, h3 { color: #0ff; }
-  #roomList div {
-    cursor: pointer;
-    margin: 5px auto;
-    padding: 8px 12px;
-    border: 1px solid #0ff;
-    border-radius: 6px;
-    width: 80%;
-    display: flex;
-    justify-content: space-between;
-    background: #111;
-    transition: 0.2s;
-  }
-  #roomList div:hover { background: #222; }
-  #chatContainer, #voiceContainer, #userSetup, #createRoom {
-    margin: 10px auto;
-    width: 90%;
-    max-width: 500px;
-    border: 1px solid #0ff;
-    border-radius: 8px;
-    padding: 10px;
-    background: #111;
-    display: none;
-  }
-  #messages {
-    height: 200px;
-    overflow-y: auto;
-    border: 1px solid #0ff;
-    padding: 5px;
-    margin-bottom: 5px;
-  }
-  #messages div img {
-    max-width: 100%;
-    border-radius: 4px;
-  }
-  input, button, select { 
-    background: #111; 
-    color: #0ff; 
-    border: 1px solid #0ff; 
-    padding: 5px; 
-    border-radius: 4px; 
-    margin: 3px;
-  }
-  button:hover { background: #222; cursor:pointer; }
+    body { margin: 0; font-family: Arial, sans-serif; background: #0e0e0e; color: #f5f5f5; }
+    .hidden { display: none; }
+    #login { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
+    input, button { margin: 5px; padding: 10px; border-radius: 5px; border: none; }
+    button { background: #1f1f1f; color: #f5f5f5; cursor: pointer; }
+    button:hover { background: #333; }
+    #rooms { padding: 20px; }
+    .room { padding: 10px; margin: 5px; border: 1px solid #444; cursor: pointer; border-radius: 5px; display: flex; justify-content: space-between; }
+    #chatBox, #voiceBox { position: fixed; bottom: 20px; right: 20px; width: 300px; height: 400px; background: #1c1c1c; border-radius: 10px; display: flex; flex-direction: column; }
+    #messages { flex: 1; overflow-y: auto; padding: 10px; }
+    #newMessage { display: flex; }
+    #newMessage input { flex: 1; }
+    #usersList { font-size: 12px; }
 </style>
 </head>
 <body>
 
-<h2>Stealth Chat & Voice</h2>
-
-<div id="userSetup">
-  <h3>Enter your name</h3>
-  <input type="text" id="userNameInput" placeholder="Your name">
-  <button onclick="setUserName()">Enter</button>
+<div id="login">
+    <h1>Stealth Chat</h1>
+    <input id="usernameInput" placeholder="Enter your username" />
+    <button id="loginBtn">Login</button>
 </div>
 
-<div id="mainMenu" style="display:none;">
-  <button onclick="showCreateRoom()">Create Room</button>
-  <button onclick="loadRooms()">Show Rooms</button>
+<div id="rooms" class="hidden">
+    <h2>Rooms</h2>
+    <div id="roomsList"></div>
+    <input id="newRoomName" placeholder="New room name" />
+    <input id="newRoomPass" placeholder="Password (optional)" />
+    <select id="roomType"><option value="chat">Chat</option><option value="voice">Voice</option></select>
+    <button id="createRoomBtn">Create Room</button>
 </div>
 
-<div id="createRoom">
-  <h3>Create a Room</h3>
-  <input type="text" id="roomNameInput" placeholder="Room name">
-  <select id="roomType">
-    <option value="public">Public</option>
-    <option value="private">Private</option>
-    <option value="voice">Voice Chat</option>
-  </select>
-  <input type="text" id="roomPassword" placeholder="Password for private" style="display:none;">
-  <button onclick="createRoom()">Create</button>
-  <button onclick="cancelCreateRoom()">Cancel</button>
+<div id="chatBox" class="hidden">
+    <div id="messages"></div>
+    <div id="newMessage">
+        <input id="messageInput" placeholder="Type a message" />
+        <input type="file" id="imageInput" />
+        <button id="sendBtn">Send</button>
+    </div>
+    <button id="leaveChatBtn">Leave Room</button>
 </div>
 
-<div id="roomList"></div>
-
-<div id="chatContainer">
-  <h3 id="chatRoomName"></h3>
-  <div id="messages"></div>
-  <input type="text" id="msgInput" placeholder="Type a message">
-  <input type="file" id="imageInput" accept="image/*">
-  <button onclick="sendMessage()">Send</button>
-  <button onclick="leaveRoom()">Leave Room</button>
+<div id="voiceBox" class="hidden">
+    <h3>Voice Room</h3>
+    <div id="usersList"></div>
+    <button id="leaveVoiceBtn">Leave Room</button>
 </div>
 
-<div id="voiceContainer">
-  <h3 id="voiceRoomName"></h3>
-  <audio id="localAudio" autoplay muted></audio>
-  <button onclick="leaveRoom()">Leave Voice</button>
-</div>
-
-<!-- Firebase SDK -->
+<!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 
 <script>
+// Firebase config
 const firebaseConfig = {
 apiKey: "AIzaSyC3zgBQLFgUhHHJPlTNeyGobAilCVPEvBk",
 authDomain: "random-chat-2ed9a.firebaseapp.com",
@@ -119,160 +69,193 @@ messagingSenderId: "608975566065",
 appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
 };
 firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
+const db = firebase.database();
 const storage = firebase.storage();
 
+let username = '';
 let currentRoom = null;
-let chatUnsub = null;
-let userName = null;
+let currentRoomType = null;
+let localStream = null;
+let peers = {};
 
-// ---- USER SETUP ----
-function setUserName(){
-  const input = document.getElementById("userNameInput");
-  if(input.value.trim() === "") return alert("Enter a valid name!");
-  userName = input.value.trim();
-  document.getElementById("userSetup").style.display = "none";
-  document.getElementById("mainMenu").style.display = "block";
-}
+// Login
+document.getElementById('loginBtn').onclick = () => {
+    const name = document.getElementById('usernameInput').value.trim();
+    if (!name) return alert('Enter username');
+    username = name;
+    document.getElementById('login').classList.add('hidden');
+    document.getElementById('rooms').classList.remove('hidden');
+    loadRooms();
+};
 
-// ---- SHOW CREATE ROOM ----
-function showCreateRoom(){
-  document.getElementById("createRoom").style.display = "block";
-}
-function cancelCreateRoom(){
-  document.getElementById("createRoom").style.display = "none";
-}
-
-// ---- ROOM PASSWORD FIELD TOGGLE ----
-document.getElementById("roomType").addEventListener("change", ()=>{
-  const pwInput = document.getElementById("roomPassword");
-  if(document.getElementById("roomType").value === "private") pwInput.style.display = "inline-block";
-  else pwInput.style.display = "none";
-});
-
-// ---- CREATE ROOM ----
-async function createRoom(){
-  const name = document.getElementById("roomNameInput").value.trim();
-  const type = document.getElementById("roomType").value;
-  const password = document.getElementById("roomPassword").value.trim();
-  if(!name) return alert("Room needs a name!");
-  const roomRef = db.collection("rooms").doc(name);
-  const snap = await roomRef.get();
-  if(snap.exists) return alert("Room already exists!");
-  await roomRef.set({
-    name: name,
-    type: type,
-    private: type==="private",
-    password: password || ""
-  });
-  alert("Room created!");
-  document.getElementById("createRoom").style.display = "none";
-  loadRooms();
-}
-
-// ---- LOAD ROOMS ----
-async function loadRooms(){
-  const roomListDiv = document.getElementById("roomList");
-  roomListDiv.innerHTML = "";
-  const snapshot = await db.collection("rooms").get();
-  snapshot.forEach(doc=>{
-    const data = doc.data();
-    const div = document.createElement("div");
-    let lock = data.private ? "🔒" : "";
-    div.innerHTML = `<span>${data.name} (${data.type})</span> ${lock}`;
-    div.onclick = async ()=>{
-      if(data.private){
-        const pw = prompt("Enter password for " + data.name);
-        if(pw !== data.password) return alert("Wrong password!");
-      }
-      if(data.type==="voice") joinVoiceRoom(data.name);
-      else joinChatRoom(data.name);
-    };
-    roomListDiv.appendChild(div);
-  });
-}
-
-// ---- JOIN CHAT ROOM ----
-function joinChatRoom(roomName){
-  leaveRoom();
-  currentRoom = roomName;
-  document.getElementById("chatRoomName").innerText = roomName;
-  document.getElementById("chatContainer").style.display = "block";
-  const msgDiv = document.getElementById("messages");
-  msgDiv.innerHTML = "";
-  chatUnsub = db.collection("rooms").doc(roomName).collection("messages").orderBy("time")
-    .onSnapshot(snapshot=>{
-      msgDiv.innerHTML = "";
-      snapshot.forEach(doc=>{
-        const m = doc.data();
-        const div = document.createElement("div");
-        if(m.type==="text") div.textContent = m.sender+": "+m.text;
-        else if(m.type==="image"){
-          const img = document.createElement("img");
-          img.src = m.url;
-          div.appendChild(img);
+// Load rooms
+function loadRooms() {
+    db.ref('rooms').on('value', snapshot => {
+        const roomsList = document.getElementById('roomsList');
+        roomsList.innerHTML = '';
+        const rooms = snapshot.val() || {};
+        for (let key in rooms) {
+            const room = rooms[key];
+            const div = document.createElement('div');
+            div.className = 'room';
+            div.textContent = room.name + (room.password ? ' 🔒' : '');
+            div.onclick = () => joinRoom(key, room);
+            roomsList.appendChild(div);
         }
-        msgDiv.appendChild(div);
-      });
-      msgDiv.scrollTop = msgDiv.scrollHeight;
     });
 }
 
-// ---- SEND MESSAGE ----
-async function sendMessage(){
-  if(!currentRoom) return;
-  const msgInput = document.getElementById("msgInput");
-  const imageInput = document.getElementById("imageInput");
+// Create room
+document.getElementById('createRoomBtn').onclick = () => {
+    const name = document.getElementById('newRoomName').value.trim();
+    if (!name) return alert('Enter room name');
+    const type = document.getElementById('roomType').value;
+    const password = document.getElementById('newRoomPass').value;
+    const newRoomRef = db.ref('rooms').push();
+    newRoomRef.set({ name, type, password: password || '' });
+    document.getElementById('newRoomName').value = '';
+    document.getElementById('newRoomPass').value = '';
+};
 
-  if(imageInput.files[0]){
-    const file = imageInput.files[0];
-    const ref = storage.ref().child('images/'+Date.now()+"_"+file.name);
-    await ref.put(file);
-    const url = await ref.getDownloadURL();
-    db.collection("rooms").doc(currentRoom).collection("messages").add({
-      type:"image",
-      url:url,
-      sender:userName,
-      time:Date.now()
+// Join room
+async function joinRoom(roomId, room) {
+    if (room.password) {
+        const pass = prompt('Enter room password:');
+        if (pass !== room.password) return alert('Wrong password');
+    }
+    leaveRoom();
+    currentRoom = roomId;
+    currentRoomType = room.type;
+
+    if (room.type === 'chat') {
+        document.getElementById('chatBox').classList.remove('hidden');
+        loadMessages(roomId);
+    } else {
+        document.getElementById('voiceBox').classList.remove('hidden');
+        startVoice(roomId);
+    }
+}
+
+// Leave room
+function leaveRoom() {
+    if (!currentRoom) return;
+    if (currentRoomType === 'chat') {
+        document.getElementById('chatBox').classList.add('hidden');
+    } else {
+        document.getElementById('voiceBox').classList.add('hidden');
+        stopVoice();
+    }
+    currentRoom = null;
+    currentRoomType = null;
+}
+
+document.getElementById('leaveChatBtn').onclick = leaveRoom;
+document.getElementById('leaveVoiceBtn').onclick = leaveRoom;
+
+// Chat messages
+function loadMessages(roomId) {
+    const messagesDiv = document.getElementById('messages');
+    messagesDiv.innerHTML = '';
+    db.ref('messages/' + roomId).on('child_added', snapshot => {
+        const msg = snapshot.val();
+        const div = document.createElement('div');
+        if (msg.image) {
+            div.innerHTML = `<b>${msg.user}:</b><br/><img src="${msg.image}" style="max-width:100%;"/>`;
+        } else {
+            div.innerHTML = `<b>${msg.user}:</b> ${msg.text}`;
+        }
+        messagesDiv.appendChild(div);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
     });
-    imageInput.value="";
-  }
+}
 
-  if(msgInput.value.trim()!==""){
-    db.collection("rooms").doc(currentRoom).collection("messages").add({
-      type:"text",
-      text:msgInput.value,
-      sender:userName,
-      time:Date.now()
+document.getElementById('sendBtn').onclick = async () => {
+    const input = document.getElementById('messageInput');
+    const fileInput = document.getElementById('imageInput');
+    let msg = { user: username, text: input.value, image: '' };
+
+    if (fileInput.files[0]) {
+        const file = fileInput.files[0];
+        const storageRef = storage.ref('images/' + Date.now() + '_' + file.name);
+        await storageRef.put(file);
+        msg.image = await storageRef.getDownloadURL();
+        fileInput.value = '';
+    }
+
+    if (!msg.text && !msg.image) return;
+    db.ref('messages/' + currentRoom).push(msg);
+    input.value = '';
+};
+
+// Voice Chat with WebRTC
+async function startVoice(roomId) {
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    db.ref('voice/' + roomId).on('child_added', async snapshot => {
+        const data = snapshot.val();
+        if (data.user === username) return;
+        if (data.offer && !peers[data.user]) await handleOffer(data.offer, data.user, roomId);
+        if (data.answer && peers[data.user]) await handleAnswer(data.answer, data.user);
+        if (data.candidate && peers[data.user]) await handleCandidate(data.candidate, data.user);
     });
-    msgInput.value="";
-  }
+
+    db.ref('voice/' + roomId + '/users/' + username).set(true);
+    updateUsersList(roomId);
 }
 
-// ---- JOIN VOICE ROOM ----
-async function joinVoiceRoom(roomName){
-  leaveRoom();
-  currentRoom = roomName;
-  document.getElementById("voiceRoomName").innerText = roomName;
-  document.getElementById("voiceContainer").style.display = "block";
-  const localAudio = document.getElementById("localAudio");
-  try{
-    const stream = await navigator.mediaDevices.getUserMedia({audio:true});
-    localAudio.srcObject = stream;
-    // In a real app you'd use WebRTC for voice streaming
-    alert("Voice chat ready (demo only: local audio). WebRTC needed for real connection.");
-  }catch(e){ alert("Microphone access denied"); }
+function stopVoice() {
+    for (let peer in peers) {
+        peers[peer].close();
+    }
+    peers = {};
+    if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+    }
+    if (currentRoom) db.ref('voice/' + currentRoom + '/users/' + username).remove();
 }
 
-// ---- LEAVE ROOM ----
-function leaveRoom(){
-  if(chatUnsub) chatUnsub(); 
-  chatUnsub = null;
-  currentRoom=null;
-  document.getElementById("chatContainer").style.display="none";
-  document.getElementById("voiceContainer").style.display="none";
+function updateUsersList(roomId) {
+    db.ref('voice/' + roomId + '/users').on('value', snapshot => {
+        const users = snapshot.val() || {};
+        document.getElementById('usersList').innerHTML = Object.keys(users).join('<br/>');
+    });
 }
 
+async function handleOffer(offer, user, roomId) {
+    const pc = new RTCPeerConnection();
+    peers[user] = pc;
+    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+    pc.onicecandidate = e => { if (e.candidate) sendCandidate(e.candidate, user, roomId); };
+    pc.ontrack = e => playAudio(e.streams[0], user);
+
+    await pc.setRemoteDescription(new RTCSessionDescription(offer));
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    db.ref('voice/' + roomId + '/signals/' + user).push({ answer, user: username });
+}
+
+async function handleAnswer(answer, user) {
+    await peers[user].setRemoteDescription(new RTCSessionDescription(answer));
+}
+
+async function handleCandidate(candidate, user) {
+    await peers[user].addIceCandidate(new RTCIceCandidate(candidate));
+}
+
+function sendCandidate(candidate, user, roomId) {
+    db.ref('voice/' + roomId + '/signals/' + user).push({ candidate, user: username });
+}
+
+function playAudio(stream, user) {
+    let audio = document.getElementById('audio_' + user);
+    if (!audio) {
+        audio = document.createElement('audio');
+        audio.id = 'audio_' + user;
+        audio.autoplay = true;
+        document.body.appendChild(audio);
+    }
+    audio.srcObject = stream;
+}
 </script>
 </body>
 </html>
