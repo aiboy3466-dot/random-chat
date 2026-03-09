@@ -11,8 +11,9 @@
     font-family: 'Segoe UI', sans-serif;
     margin: 0;
     padding: 0;
+    text-align: center;
   }
-  h2, h3 { color: #0ff; text-align:center; }
+  h2, h3 { color: #0ff; }
   #roomList div {
     cursor: pointer;
     margin: 5px auto;
@@ -26,8 +27,7 @@
     transition: 0.2s;
   }
   #roomList div:hover { background: #222; }
-  #chatContainer, #voiceContainer {
-    display: none;
+  #chatContainer, #voiceContainer, #userSetup {
     margin: 10px auto;
     width: 90%;
     max-width: 500px;
@@ -35,6 +35,7 @@
     border-radius: 8px;
     padding: 10px;
     background: #111;
+    display: none;
   }
   #messages {
     height: 200px;
@@ -53,14 +54,22 @@
     border: 1px solid #0ff; 
     padding: 5px; 
     border-radius: 4px; 
+    margin: 3px;
   }
   button:hover { background: #222; cursor:pointer; }
 </style>
 </head>
 <body>
 
-<h2>Stealth Chat & Voice Rooms</h2>
-<h3>Available Rooms</h3>
+<h2>Stealth Chat & Voice</h2>
+
+<div id="userSetup">
+  <h3>Enter your name</h3>
+  <input type="text" id="userNameInput" placeholder="Your name">
+  <button onclick="setUserName()">Enter</button>
+</div>
+
+<button id="showRoomsBtn" style="display:none;" onclick="loadRooms()">Show Rooms</button>
 <div id="roomList"></div>
 
 <div id="chatContainer">
@@ -99,6 +108,16 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
 
   let currentRoom = null;
   let chatUnsub = null;
+  let userName = null;
+
+  // ---- USER SETUP ----
+  function setUserName(){
+    const input = document.getElementById("userNameInput");
+    if(input.value.trim() === "") return alert("Enter a valid name!");
+    userName = input.value.trim();
+    document.getElementById("userSetup").style.display = "none";
+    document.getElementById("showRoomsBtn").style.display = "inline-block";
+  }
 
   // ---- LOAD ROOMS ----
   async function loadRooms(){
@@ -119,8 +138,6 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
       roomListDiv.appendChild(div);
     });
   }
-
-  loadRooms();
 
   // ---- JOIN CHAT ROOM ----
   function joinChatRoom(roomName){
@@ -164,7 +181,7 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
       db.collection("rooms").doc(currentRoom).collection("messages").add({
         type: "image",
         url: url,
-        sender: "Anonymous",
+        sender: userName,
         time: Date.now()
       });
       imageInput.value = "";
@@ -174,7 +191,7 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
       db.collection("rooms").doc(currentRoom).collection("messages").add({
         type: "text",
         text: msgInput.value,
-        sender: "Anonymous",
+        sender: userName,
         time: Date.now()
       });
       msgInput.value = "";
@@ -190,8 +207,6 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
     document.getElementById("voiceContainer").style.display = "none";
   }
 
-  // Optional: voice chat setup here (WebRTC) 
-  // Placeholder since full voice chat is more complex, requires signaling server
 </script>
 
 </body>
