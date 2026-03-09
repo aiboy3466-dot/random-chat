@@ -1,20 +1,57 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Chat & Voice Rooms</title>
+  <title>Stealth Chat & Voice Rooms</title>
   <style>
-    body { font-family: Arial, sans-serif; background: #f4f4f4; }
+    /* ===== DARK STEALTH THEME ===== */
+    body { 
+      font-family: 'Segoe UI', sans-serif; 
+      background: #0f0f0f; 
+      color: #eee; 
+      display: flex; 
+      flex-direction: column; 
+      align-items: center; 
+      margin: 0; 
+      padding: 0; 
+    }
+    h2 { color: #0ff; margin-top: 20px; }
+    input, button { 
+      padding: 8px; margin: 5px; border-radius: 5px; border: none; 
+    }
+    input { background: #222; color: #0ff; }
+    button { background: #0ff; color: #000; cursor: pointer; }
+    button:hover { background: #0cc; }
     #roomUI { margin: 20px; }
-    .chatBox, .voiceBox { border: 1px solid #ccc; padding: 10px; background: #fff; width: 350px; }
-    .messages { height: 200px; overflow-y: scroll; border: 1px solid #ddd; margin-bottom: 10px; padding: 5px; }
+    .chatBox, .voiceBox { 
+      border: 1px solid #0ff; 
+      padding: 10px; 
+      background: #111; 
+      width: 400px; 
+      border-radius: 10px;
+      box-shadow: 0 0 10px #0ff;
+      margin-top: 10px;
+      animation: fadeIn 0.5s;
+    }
+    .messages { 
+      height: 250px; 
+      overflow-y: auto; 
+      border: 1px solid #0ff; 
+      margin-bottom: 10px; 
+      padding: 5px; 
+      background: #111;
+      border-radius: 5px;
+    }
     .message { margin-bottom: 5px; }
-    .message img { max-width: 100px; display: block; margin-top: 5px; }
-    audio { display: block; margin-top: 5px; }
+    .message img { max-width: 100px; display: block; margin-top: 5px; border-radius: 5px; }
+    audio { display: block; margin-top: 5px; border-radius: 5px; }
+    .notification { font-size: 0.9em; color: #0f0; }
+    .typing { font-size: 0.85em; color: #ff0; }
+    @keyframes fadeIn { from {opacity:0} to {opacity:1} }
   </style>
 </head>
 <body>
 
-<h2>Join a Room</h2>
+<h2>Stealth Chat & Voice</h2>
 <input type="text" id="roomName" placeholder="Room name">
 <button onclick="joinChatRoom()">Join Chat Room</button>
 <button onclick="joinVoiceRoom()">Join Voice Room</button>
@@ -30,7 +67,7 @@
   // ===========================
   // Firebase setup - CHANGE THIS
   // ===========================
-const firebaseConfig = {
+  const firebaseConfig = {
 apiKey: "AIzaSyC3zgBQLFgUhHHJPlTNeyGobAilCVPEvBk",
 authDomain: "random-chat-2ed9a.firebaseapp.com",
 projectId: "random-chat-2ed9a",
@@ -38,7 +75,6 @@ storageBucket: "random-chat-2ed9a.firebasestorage.app",
 messagingSenderId: "608975566065",
 appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
   };
-
   firebase.initializeApp(firebaseConfig);
   const db = firebase.firestore();
   const storage = firebase.storage();
@@ -53,6 +89,7 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
   let roomType = null; // 'chat' or 'voice'
   let messagesListener = null;
   let usersListener = null;
+  let typingTimeout;
 
   // ===========================
   // Join Chat Room
@@ -60,47 +97,61 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
   function joinChatRoom() {
     leaveRoom();
     const room = document.getElementById("roomName").value;
-    if (!room) return alert("Enter a room name");
+    if(!room) return alert("Enter a room name");
     currentRoom = room;
     roomType = 'chat';
 
-    // Add user
     db.collection("rooms").doc(room).collection("users").doc(userId).set({ joined: Date.now() });
 
-    // Setup chat UI
+    // Chat UI
     document.getElementById("roomUI").innerHTML = `
       <div class="chatBox">
+        <div class="notification" id="notif"></div>
         <div class="messages" id="messages"></div>
-        <input type="text" id="msgInput" placeholder="Type a message">
+        <div class="typing" id="typingIndicator"></div>
+        <input type="text" id="msgInput" placeholder="Type a message" oninput="typingIndicator()">
         <input type="file" id="imgInput">
         <button onclick="sendMessage()">Send</button>
       </div>
     `;
 
-    // Listen to messages
+    // Listen messages
     messagesListener = db.collection("rooms").doc(room).collection("messages")
       .orderBy("time").onSnapshot(snapshot => {
         const msgDiv = document.getElementById("messages");
-        msgDiv.innerHTML = '';
-        snapshot.forEach(doc => {
-          const data = doc.data();
-          const div = document.createElement("div");
-          div.classList.add("message");
-          div.innerHTML = `<strong>${data.user}:</strong> ${data.text || ''}`;
-          if(data.imageURL){
-            const img = document.createElement("img");
-            img.src = data.imageURL;
-            div.appendChild(img);
+        snapshot.docChanges().forEach(change => {
+          if(change.type === "added"){
+            const data = change.doc.data();
+            const div = document.createElement("div");
+            div.classList.add("message");
+            div.innerHTML = `<strong>${data.user}:</strong> ${data.text || ''}`;
+            if(data.imageURL){
+              const img = document.createElement("img");
+              img.src = data.imageURL;
+              div.appendChild(img);
+            }
+            msgDiv.appendChild(div);
+            msgDiv.scrollTop = msgDiv.scrollHeight;
           }
-          msgDiv.appendChild(div);
-          msgDiv.scrollTop = msgDiv.scrollHeight;
         });
       });
+
+    // Listen typing & join/leave notifications
+    db.collection("rooms").doc(room).collection("users").onSnapshot(snapshot => {
+      snapshot.docChanges().forEach(change => {
+        const notif = document.getElementById("notif");
+        if(change.type === "added" && change.doc.id !== userId){
+          notif.innerText = `${change.doc.id} joined the chat`;
+          setTimeout(()=>notif.innerText='',2000);
+        }
+        if(change.type === "removed"){
+          notif.innerText = `${change.doc.id} left the chat`;
+          setTimeout(()=>notif.innerText='',2000);
+        }
+      });
+    });
   }
 
-  // ===========================
-  // Send Message
-  // ===========================
   async function sendMessage() {
     const text = document.getElementById("msgInput").value;
     const file = document.getElementById("imgInput").files[0];
@@ -125,21 +176,39 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
     document.getElementById("msgInput").value = '';
   }
 
+  // Typing indicator
+  function typingIndicator(){
+    db.collection("rooms").doc(currentRoom).collection("users").doc(userId).update({typing: true});
+    clearTimeout(typingTimeout);
+    typingTimeout = setTimeout(()=>{ 
+      db.collection("rooms").doc(currentRoom).collection("users").doc(userId).update({typing: false});
+    },1000);
+
+    // Listen others typing
+    db.collection("rooms").doc(currentRoom).collection("users").onSnapshot(snapshot => {
+      let typingUsers = [];
+      snapshot.forEach(doc => {
+        if(doc.id !== userId && doc.data().typing) typingUsers.push(doc.id);
+      });
+      document.getElementById("typingIndicator").innerText = typingUsers.length ? `${typingUsers.join(', ')} is typing...` : '';
+    });
+  }
+
   // ===========================
-  // Join Voice Room
+  // Voice Room
   // ===========================
-  async function joinVoiceRoom() {
+  async function joinVoiceRoom(){
     leaveRoom();
     const room = document.getElementById("roomName").value;
     if(!room) return alert("Enter a room name");
 
     currentRoom = room;
     roomType = 'voice';
-
     db.collection("rooms").doc(room).collection("users").doc(userId).set({ joined: Date.now() });
 
     document.getElementById("roomUI").innerHTML = `
       <div class="voiceBox">
+        <div class="notification" id="notif"></div>
         <h3>Voice Room: ${room}</h3>
         <button onclick="startVoice()">Start Voice</button>
         <div id="peers"></div>
@@ -147,91 +216,79 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
     `;
   }
 
-  async function startVoice() {
+  async function startVoice(){
     localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
     const usersRef = db.collection("rooms").doc(currentRoom).collection("users");
 
-    // Listen for other users
     usersListener = usersRef.onSnapshot(snapshot => {
       snapshot.docChanges().forEach(change => {
         if(change.type === 'added' && change.doc.id !== userId){
-          setupPeer(change.doc.id, true);
+          setupPeer(change.doc.id,true);
+          showNotif(`${change.doc.id} joined voice`);
         }
         if(change.type === 'removed'){
           removePeer(change.doc.id);
+          showNotif(`${change.doc.id} left voice`);
         }
       });
     });
 
-    // Listen for offers/answers
     db.collection("rooms").doc(currentRoom).collection("signals").onSnapshot(snapshot => {
-      snapshot.docChanges().forEach(async change => {
+      snapshot.docChanges().forEach(async change=>{
         const data = change.doc.data();
         if(data.target === userId){
           let pc = peerConnections[data.sender];
-          if(!pc){
-            pc = setupPeer(data.sender, false);
-          }
+          if(!pc) pc = setupPeer(data.sender,false);
           if(data.type === 'offer'){
             await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
             db.collection("rooms").doc(currentRoom).collection("signals").add({
-              sender: userId,
-              target: data.sender,
-              type: 'answer',
-              answer: answer
+              sender:userId,target:data.sender,type:'answer',answer:answer
             });
           }
-          if(data.type === 'answer'){
+          if(data.type==='answer'){
             await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
           }
-          if(data.type === 'ice'){
-            try { await pc.addIceCandidate(data.candidate); } catch(e){}
+          if(data.type==='ice'){
+            try{ await pc.addIceCandidate(data.candidate);}catch(e){}
           }
         }
       });
     });
   }
 
-  function setupPeer(peerId, isInitiator){
+  function setupPeer(peerId,isInitiator){
     const pc = new RTCPeerConnection();
     peerConnections[peerId] = pc;
+    localStream.getTracks().forEach(track=>pc.addTrack(track,localStream));
 
-    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-
-    pc.ontrack = (event) => {
-      let audio = document.getElementById('audio_' + peerId);
+    pc.ontrack = (event)=>{
+      let audio = document.getElementById('audio_'+peerId);
       if(!audio){
         audio = document.createElement('audio');
-        audio.id = 'audio_' + peerId;
+        audio.id = 'audio_'+peerId;
         audio.autoplay = true;
         document.getElementById("peers").appendChild(audio);
       }
       audio.srcObject = event.streams[0];
     };
 
-    pc.onicecandidate = (event) => {
+    pc.onicecandidate = (event)=>{
       if(event.candidate){
         db.collection("rooms").doc(currentRoom).collection("signals").add({
-          sender: userId,
-          target: peerId,
-          type: 'ice',
-          candidate: event.candidate
+          sender:userId,target:peerId,type:'ice',candidate:event.candidate
         });
       }
     };
 
     if(isInitiator){
-      pc.onnegotiationneeded = async () => {
+      pc.onnegotiationneeded = async ()=>{
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         db.collection("rooms").doc(currentRoom).collection("signals").add({
-          sender: userId,
-          target: peerId,
-          type: 'offer',
-          offer: offer
+          sender:userId,target:peerId,type:'offer',offer:offer
         });
       };
     }
@@ -241,12 +298,18 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
 
   function removePeer(peerId){
     const pc = peerConnections[peerId];
-    if(pc){
-      pc.close();
-      delete peerConnections[peerId];
-    }
-    const audio = document.getElementById('audio_' + peerId);
+    if(pc) pc.close();
+    delete peerConnections[peerId];
+    const audio = document.getElementById('audio_'+peerId);
     if(audio) audio.remove();
+  }
+
+  function showNotif(text){
+    const n = document.getElementById("notif");
+    if(n){
+      n.innerText = text;
+      setTimeout(()=>n.innerText='',2000);
+    }
   }
 
   // ===========================
@@ -254,25 +317,19 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
   // ===========================
   function leaveRoom(){
     if(!currentRoom) return;
-
     db.collection("rooms").doc(currentRoom).collection("users").doc(userId).delete();
-    if(roomType === 'chat' && messagesListener) messagesListener();
-    if(roomType === 'voice' && usersListener) usersListener();
-
-    Object.values(peerConnections).forEach(pc => pc.close());
-    peerConnections = {};
-
-    if(localStream){
-      localStream.getTracks().forEach(track => track.stop());
-      localStream = null;
-    }
-
-    currentRoom = null;
-    roomType = null;
-    document.getElementById("roomUI").innerHTML = "";
+    if(messagesListener) messagesListener();
+    if(usersListener) usersListener();
+    Object.values(peerConnections).forEach(pc=>pc.close());
+    peerConnections={};
+    if(localStream) localStream.getTracks().forEach(t=>t.stop());
+    localStream = null;
+    currentRoom=null;
+    roomType=null;
+    document.getElementById("roomUI").innerHTML="";
   }
 
-  window.addEventListener("beforeunload", () => leaveRoom());
+  window.addEventListener("beforeunload",()=>leaveRoom());
 </script>
 </body>
 </html>
