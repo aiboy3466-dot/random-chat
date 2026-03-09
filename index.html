@@ -4,6 +4,8 @@
 
 <title>Chat Rooms</title>
 
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
 <style>
 
 body{
@@ -11,11 +13,13 @@ font-family:Arial;
 background:#0f0f0f;
 color:white;
 text-align:center;
+margin:0;
 }
 
 #container{
-width:70%;
+max-width:800px;
 margin:auto;
+padding:10px;
 }
 
 #rooms{
@@ -28,6 +32,8 @@ margin-bottom:20px;
 .room{
 padding:10px;
 border-bottom:1px solid gray;
+display:flex;
+justify-content:space-between;
 }
 
 #chat{
@@ -36,16 +42,44 @@ height:300px;
 overflow:auto;
 background:#1a1a1a;
 padding:10px;
+text-align:left;
+}
+
+#typing{
+color:#00ff9c;
+font-size:14px;
 }
 
 input{
 padding:8px;
 margin:5px;
+width:60%;
 }
 
 button{
 padding:8px 14px;
 cursor:pointer;
+}
+
+.message{
+margin:6px 0;
+display:flex;
+align-items:center;
+}
+
+.avatar{
+width:28px;
+height:28px;
+border-radius:50%;
+margin-right:8px;
+}
+
+@media (max-width:600px){
+
+input{
+width:90%;
+}
+
 }
 
 </style>
@@ -54,7 +88,7 @@ cursor:pointer;
 
 <body>
 
-<h1>Public Chat Rooms</h1>
+<h2>Public Chat Rooms</h2>
 
 <div id="container">
 
@@ -62,7 +96,8 @@ cursor:pointer;
 
 <br>
 
-<input id="roomName" placeholder="Create room name">
+<input id="roomName" placeholder="Room name">
+<input id="roomPass" placeholder="Password (optional)">
 <button onclick="createRoom()">Create Room</button>
 
 <h3>Rooms</h3>
@@ -73,9 +108,11 @@ cursor:pointer;
 
 <div id="chat"></div>
 
+<div id="typing"></div>
+
 <br>
 
-<input id="msg" placeholder="Message">
+<input id="msg" placeholder="Message" oninput="typing()">
 <button onclick="send()">Send</button>
 
 </div>
@@ -101,28 +138,20 @@ var db=firebase.firestore();
 let userId=Math.random().toString(36).substring(2);
 let currentRoom=null;
 
-const badWords=["fuck","shit","bitch","ass"];
-
-function filter(text){
-
-badWords.forEach(word=>{
-let r=new RegExp(word,"gi");
-text=text.replace(r,"****");
-});
-
-return text;
-
+function avatar(name){
+return "https://api.dicebear.com/7.x/identicon/svg?seed="+name;
 }
 
 function createRoom(){
 
 let name=document.getElementById("roomName").value.trim();
+let pass=document.getElementById("roomPass").value;
 
 if(!name)return;
 
 db.collection("rooms").doc(name).set({
 users:0,
-created:Date.now()
+password:pass
 });
 
 joinRoom(name);
@@ -141,7 +170,7 @@ let data=doc.data();
 
 html+=`
 <div class="room">
-<b>${doc.id}</b> (${data.users || 0} users)
+<span>${doc.id} (${data.users || 0})</span>
 <button onclick="joinRoom('${doc.id}')">Join</button>
 </div>
 `;
@@ -158,11 +187,29 @@ function joinRoom(room){
 
 if(currentRoom)return;
 
+let ref=db.collection("rooms").doc(room);
+
+ref.get().then(doc=>{
+
+let data=doc.data();
+
+if(data.password){
+
+let entered=prompt("Room password:");
+
+if(entered!==data.password){
+
+alert("Wrong password");
+
+return;
+
+}
+
+}
+
 currentRoom=room;
 
 document.getElementById("roomTitle").innerText="Room: "+room;
-
-let ref=db.collection("rooms").doc(room);
 
 ref.update({
 users:firebase.firestore.FieldValue.increment(1)
@@ -175,10 +222,21 @@ ref.collection("messages")
 let html="";
 
 snapshot.forEach(doc=>{
-html+="<p>"+doc.data().text+"</p>";
+
+let d=doc.data();
+
+html+=`
+<div class="message">
+<img class="avatar" src="${avatar(d.user)}">
+<span><b>${d.user}</b>: ${d.text}</span>
+</div>
+`;
+
 });
 
 document.getElementById("chat").innerHTML=html;
+
+});
 
 });
 
@@ -189,20 +247,63 @@ function send(){
 if(!currentRoom)return;
 
 let name=document.getElementById("username").value||"Anonymous";
-
 let message=document.getElementById("msg").value;
-
-message=filter(message);
 
 db.collection("rooms")
 .doc(currentRoom)
 .collection("messages")
 .add({
-text:name+": "+message,
+user:name,
+text:message,
 time:Date.now()
 });
 
 document.getElementById("msg").value="";
+
+}
+
+function typing(){
+
+if(!currentRoom)return;
+
+let name=document.getElementById("username").value||"Someone";
+
+db.collection("rooms")
+.doc(currentRoom)
+.collection("typing")
+.doc("status")
+.set({
+user:name,
+time:Date.now()
+});
+
+}
+
+function listenTyping(){
+
+if(!currentRoom)return;
+
+db.collection("rooms")
+.doc(currentRoom)
+.collection("typing")
+.doc("status")
+.onSnapshot(doc=>{
+
+if(doc.exists){
+
+let data=doc.data();
+
+document.getElementById("typing").innerText=data.user+" is typing...";
+
+setTimeout(()=>{
+
+document.getElementById("typing").innerText="";
+
+},2000);
+
+}
+
+});
 
 }
 
