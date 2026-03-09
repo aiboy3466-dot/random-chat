@@ -13,29 +13,29 @@ color:white;
 text-align:center;
 }
 
-#main{
+#container{
 width:70%;
 margin:auto;
 }
 
 #rooms{
 border:1px solid gray;
-padding:15px;
 background:#1a1a1a;
+padding:15px;
 margin-bottom:20px;
 }
 
 .room{
-border-bottom:1px solid gray;
 padding:10px;
+border-bottom:1px solid gray;
 }
 
 #chat{
 border:1px solid gray;
 height:300px;
 overflow:auto;
-padding:10px;
 background:#1a1a1a;
+padding:10px;
 }
 
 input{
@@ -48,11 +48,6 @@ padding:8px 14px;
 cursor:pointer;
 }
 
-#online{
-margin:10px;
-color:#00ff9c;
-}
-
 </style>
 
 </head>
@@ -61,15 +56,13 @@ color:#00ff9c;
 
 <h1>Public Chat Rooms</h1>
 
-<div id="online">Users online: 0</div>
+<div id="container">
 
-<div id="main">
-
-<input id="username" placeholder="Your username">
+<input id="username" placeholder="Username">
 
 <br>
 
-<input id="roomName" placeholder="Room name">
+<input id="roomName" placeholder="Create room name">
 <button onclick="createRoom()">Create Room</button>
 
 <h3>Rooms</h3>
@@ -82,7 +75,7 @@ color:#00ff9c;
 
 <br>
 
-<input id="msg" placeholder="message">
+<input id="msg" placeholder="Message">
 <button onclick="send()">Send</button>
 
 </div>
@@ -103,12 +96,12 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
 
 firebase.initializeApp(firebaseConfig);
 
-var db = firebase.firestore();
+var db=firebase.firestore();
 
 let userId=Math.random().toString(36).substring(2);
 let currentRoom=null;
 
-const badWords=["fuck","shit","bitch","ass","nigger",];
+const badWords=["fuck","shit","bitch","ass"];
 
 function filter(text){
 
@@ -121,26 +114,14 @@ return text;
 
 }
 
-function updateOnline(){
-
-db.collection("online").doc(userId).set({
-time:Date.now()
-});
-
-db.collection("online").onSnapshot(s=>{
-document.getElementById("online").innerText="Users online: "+s.size;
-});
-
-}
-
 function createRoom(){
 
-let name=document.getElementById("roomName").value;
+let name=document.getElementById("roomName").value.trim();
 
 if(!name)return;
 
 db.collection("rooms").doc(name).set({
-users:1
+created:Date.now()
 });
 
 joinRoom(name);
@@ -155,18 +136,26 @@ let html="";
 
 snapshot.forEach(doc=>{
 
-let data=doc.data();
+let room=doc.id;
+
+db.collection("rooms").doc(room).collection("users")
+.get()
+.then(users=>{
+
+let count=users.size;
 
 html+=`
 <div class="room">
-<b>${doc.id}</b> (${data.users || 0} users)
-<button onclick="joinRoom('${doc.id}')">Join</button>
+<b>${room}</b> (${count} users)
+<button onclick="joinRoom('${room}')">Join</button>
 </div>
 `;
 
+document.getElementById("rooms").innerHTML=html;
+
 });
 
-document.getElementById("rooms").innerHTML=html;
+});
 
 });
 
@@ -178,13 +167,15 @@ currentRoom=room;
 
 document.getElementById("roomTitle").innerText="Room: "+room;
 
-let ref=db.collection("rooms").doc(room);
+db.collection("rooms")
+.doc(room)
+.collection("users")
+.doc(userId)
+.set({joined:Date.now()});
 
-ref.update({
-users:firebase.firestore.FieldValue.increment(1)
-});
-
-ref.collection("messages")
+db.collection("rooms")
+.doc(room)
+.collection("messages")
 .orderBy("time")
 .onSnapshot(snapshot=>{
 
@@ -222,39 +213,30 @@ document.getElementById("msg").value="";
 
 }
 
-window.addEventListener("beforeunload",()=>{
+window.addEventListener("beforeunload",leaveRoom);
 
-db.collection("online").doc(userId).delete();
+function leaveRoom(){
 
-if(currentRoom){
+if(!currentRoom)return;
 
-let ref=db.collection("rooms").doc(currentRoom);
+let roomRef=db.collection("rooms").doc(currentRoom);
 
-ref.get().then(doc=>{
+roomRef.collection("users").doc(userId).delete().then(()=>{
 
-if(doc.exists){
+roomRef.collection("users").get().then(snapshot=>{
 
-let users=doc.data().users-1;
+if(snapshot.size===0){
 
-if(users<=0){
-
-ref.delete();
-
-}else{
-
-ref.update({users:users});
-
-}
+roomRef.delete();
 
 }
 
 });
 
-}
-
 });
 
-updateOnline();
+}
+
 loadRooms();
 
 </script>
