@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
+
 <title>Chat Rooms</title>
 
 <style>
@@ -12,55 +13,66 @@ color:white;
 text-align:center;
 }
 
-h1{
-margin-top:30px;
+#main{
+width:70%;
+margin:auto;
 }
 
 #rooms{
-width:60%;
-margin:auto;
-padding:10px;
 border:1px solid gray;
+padding:15px;
 background:#1a1a1a;
+margin-bottom:20px;
+}
+
+.room{
+border-bottom:1px solid gray;
+padding:10px;
 }
 
 #chat{
-width:60%;
-height:300px;
-margin:auto;
-overflow:auto;
 border:1px solid gray;
+height:300px;
+overflow:auto;
 padding:10px;
 background:#1a1a1a;
-}
-
-button{
-padding:8px 12px;
-margin:5px;
-cursor:pointer;
 }
 
 input{
 padding:8px;
-width:50%;
+margin:5px;
 }
 
-.room{
+button{
+padding:8px 14px;
+cursor:pointer;
+}
+
+#online{
 margin:10px;
-padding:10px;
-border-bottom:1px solid gray;
+color:#00ff9c;
 }
 
 </style>
+
 </head>
 
 <body>
 
 <h1>Public Chat Rooms</h1>
 
+<div id="online">Users online: 0</div>
+
+<div id="main">
+
+<input id="username" placeholder="Your username">
+
+<br>
+
+<input id="roomName" placeholder="Room name">
 <button onclick="createRoom()">Create Room</button>
 
-<h3>Available Rooms</h3>
+<h3>Rooms</h3>
 
 <div id="rooms"></div>
 
@@ -70,13 +82,17 @@ border-bottom:1px solid gray;
 
 <br>
 
-<input id="msg" placeholder="Type message">
+<input id="msg" placeholder="message">
 <button onclick="send()">Send</button>
+
+</div>
 
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
 
-<script>const firebaseConfig = {
+<script>
+
+const firebaseConfig = {
 apiKey: "AIzaSyC3zgBQLFgUhHHJPlTNeyGobAilCVPEvBk",
 authDomain: "random-chat-2ed9a.firebaseapp.com",
 projectId: "random-chat-2ed9a",
@@ -89,37 +105,45 @@ firebase.initializeApp(firebaseConfig);
 
 var db = firebase.firestore();
 
-let userId = Math.random().toString(36).substring(2);
-let currentRoom = null;
+let userId=Math.random().toString(36).substring(2);
+let currentRoom=null;
 
-const badWords = ["fuck","shit","bitch","ass"];
+const badWords=["fuck","shit","bitch","ass","nigger",];
 
 function filter(text){
 
-let clean = text;
-
 badWords.forEach(word=>{
-
-let reg = new RegExp(word,"gi");
-
-clean = clean.replace(reg,"****");
-
+let r=new RegExp(word,"gi");
+text=text.replace(r,"****");
 });
 
-return clean;
+return text;
+
+}
+
+function updateOnline(){
+
+db.collection("online").doc(userId).set({
+time:Date.now()
+});
+
+db.collection("online").onSnapshot(s=>{
+document.getElementById("online").innerText="Users online: "+s.size;
+});
 
 }
 
 function createRoom(){
 
-let roomId = "room_"+Math.floor(Math.random()*100000);
+let name=document.getElementById("roomName").value;
 
-db.collection("rooms").doc(roomId).set({
-users:1,
-created:Date.now()
+if(!name)return;
+
+db.collection("rooms").doc(name).set({
+users:1
 });
 
-joinRoom(roomId);
+joinRoom(name);
 
 }
 
@@ -131,49 +155,46 @@ let html="";
 
 snapshot.forEach(doc=>{
 
-let data = doc.data();
+let data=doc.data();
 
-html += `
+html+=`
 <div class="room">
-<b>${doc.id}</b>  
-(${data.users || 0} users)
+<b>${doc.id}</b> (${data.users || 0} users)
 <button onclick="joinRoom('${doc.id}')">Join</button>
 </div>
 `;
 
 });
 
-document.getElementById("rooms").innerHTML = html;
+document.getElementById("rooms").innerHTML=html;
 
 });
 
 }
 
-function joinRoom(roomId){
+function joinRoom(room){
 
-currentRoom = roomId;
+currentRoom=room;
 
-document.getElementById("roomTitle").innerText="Room: "+roomId;
+document.getElementById("roomTitle").innerText="Room: "+room;
 
-let roomRef = db.collection("rooms").doc(roomId);
+let ref=db.collection("rooms").doc(room);
 
-roomRef.update({
+ref.update({
 users:firebase.firestore.FieldValue.increment(1)
 });
 
-roomRef.collection("messages")
+ref.collection("messages")
 .orderBy("time")
 .onSnapshot(snapshot=>{
 
-let chat="";
+let html="";
 
 snapshot.forEach(doc=>{
-
-chat += "<p>"+doc.data().text+"</p>";
-
+html+="<p>"+doc.data().text+"</p>";
 });
 
-document.getElementById("chat").innerHTML = chat;
+document.getElementById("chat").innerHTML=html;
 
 });
 
@@ -181,20 +202,20 @@ document.getElementById("chat").innerHTML = chat;
 
 function send(){
 
-if(!currentRoom) return;
+if(!currentRoom)return;
 
-let message = document.getElementById("msg").value;
+let name=document.getElementById("username").value||"Anonymous";
 
-message = filter(message);
+let message=document.getElementById("msg").value;
+
+message=filter(message);
 
 db.collection("rooms")
 .doc(currentRoom)
 .collection("messages")
 .add({
-
-text:message,
+text:name+": "+message,
 time:Date.now()
-
 });
 
 document.getElementById("msg").value="";
@@ -203,23 +224,25 @@ document.getElementById("msg").value="";
 
 window.addEventListener("beforeunload",()=>{
 
+db.collection("online").doc(userId).delete();
+
 if(currentRoom){
 
-let roomRef = db.collection("rooms").doc(currentRoom);
+let ref=db.collection("rooms").doc(currentRoom);
 
-roomRef.get().then(doc=>{
+ref.get().then(doc=>{
 
 if(doc.exists){
 
-let users = doc.data().users-1;
+let users=doc.data().users-1;
 
 if(users<=0){
 
-roomRef.delete();
+ref.delete();
 
 }else{
 
-roomRef.update({users:users});
+ref.update({users:users});
 
 }
 
@@ -231,6 +254,7 @@ roomRef.update({users:users});
 
 });
 
+updateOnline();
 loadRooms();
 
 </script>
