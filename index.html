@@ -5,10 +5,11 @@
   <style>
     body { font-family: Arial, sans-serif; background: #f4f4f4; }
     #roomUI { margin: 20px; }
-    .chatBox, .voiceBox { border: 1px solid #ccc; padding: 10px; background: #fff; width: 300px; }
+    .chatBox, .voiceBox { border: 1px solid #ccc; padding: 10px; background: #fff; width: 350px; }
     .messages { height: 200px; overflow-y: scroll; border: 1px solid #ddd; margin-bottom: 10px; padding: 5px; }
     .message { margin-bottom: 5px; }
     .message img { max-width: 100px; display: block; margin-top: 5px; }
+    audio { display: block; margin-top: 5px; }
   </style>
 </head>
 <body>
@@ -49,6 +50,9 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
   let userId = 'user_' + Math.floor(Math.random() * 1000000);
   let localStream = null;
   let peerConnections = {};
+  let roomType = null; // 'chat' or 'voice'
+  let messagesListener = null;
+  let usersListener = null;
 
   // ===========================
   // Join Chat Room
@@ -57,13 +61,13 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
     leaveRoom();
     const room = document.getElementById("roomName").value;
     if (!room) return alert("Enter a room name");
-
     currentRoom = room;
+    roomType = 'chat';
 
-    // Add user to Firestore
+    // Add user
     db.collection("rooms").doc(room).collection("users").doc(userId).set({ joined: Date.now() });
 
-    // Setup UI
+    // Setup chat UI
     document.getElementById("roomUI").innerHTML = `
       <div class="chatBox">
         <div class="messages" id="messages"></div>
@@ -74,7 +78,7 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
     `;
 
     // Listen to messages
-    db.collection("rooms").doc(room).collection("messages")
+    messagesListener = db.collection("rooms").doc(room).collection("messages")
       .orderBy("time").onSnapshot(snapshot => {
         const msgDiv = document.getElementById("messages");
         msgDiv.innerHTML = '';
@@ -83,7 +87,7 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
           const div = document.createElement("div");
           div.classList.add("message");
           div.innerHTML = `<strong>${data.user}:</strong> ${data.text || ''}`;
-          if(data.imageURL) {
+          if(data.imageURL){
             const img = document.createElement("img");
             img.src = data.imageURL;
             div.appendChild(img);
@@ -95,14 +99,14 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
   }
 
   // ===========================
-  // Send Message (Text or Image)
+  // Send Message
   // ===========================
   async function sendMessage() {
     const text = document.getElementById("msgInput").value;
     const file = document.getElementById("imgInput").files[0];
     let imageURL = null;
 
-    if(file) {
+    if(file){
       const ref = storage.ref().child(`images/${Date.now()}_${file.name}`);
       await ref.put(file);
       imageURL = await ref.getDownloadURL();
@@ -114,7 +118,7 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
     db.collection("rooms").doc(currentRoom).collection("messages").add({
       user: userId,
       text: text,
-      imageURL: imageURL || null,
+      imageURL: imageURL,
       time: Date.now()
     });
 
@@ -130,6 +134,8 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
     if(!room) return alert("Enter a room name");
 
     currentRoom = room;
+    roomType = 'voice';
+
     db.collection("rooms").doc(room).collection("users").doc(userId).set({ joined: Date.now() });
 
     document.getElementById("roomUI").innerHTML = `
@@ -143,24 +149,56 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
 
   async function startVoice() {
     localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const roomRef = db.collection("rooms").doc(currentRoom);
-    const usersRef = roomRef.collection("users");
 
-    // Listen for other users joining
-    usersRef.onSnapshot(snapshot => {
+    const usersRef = db.collection("rooms").doc(currentRoom).collection("users");
+
+    // Listen for other users
+    usersListener = usersRef.onSnapshot(snapshot => {
       snapshot.docChanges().forEach(change => {
         if(change.type === 'added' && change.doc.id !== userId){
-          startPeer(change.doc.id);
+          setupPeer(change.doc.id, true);
+        }
+        if(change.type === 'removed'){
+          removePeer(change.doc.id);
+        }
+      });
+    });
+
+    // Listen for offers/answers
+    db.collection("rooms").doc(currentRoom).collection("signals").onSnapshot(snapshot => {
+      snapshot.docChanges().forEach(async change => {
+        const data = change.doc.data();
+        if(data.target === userId){
+          let pc = peerConnections[data.sender];
+          if(!pc){
+            pc = setupPeer(data.sender, false);
+          }
+          if(data.type === 'offer'){
+            await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            db.collection("rooms").doc(currentRoom).collection("signals").add({
+              sender: userId,
+              target: data.sender,
+              type: 'answer',
+              answer: answer
+            });
+          }
+          if(data.type === 'answer'){
+            await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+          }
+          if(data.type === 'ice'){
+            try { await pc.addIceCandidate(data.candidate); } catch(e){}
+          }
         }
       });
     });
   }
 
-  // Basic WebRTC peer connection (audio only)
-  async function startPeer(peerId) {
-    if(peerConnections[peerId]) return;
-
+  function setupPeer(peerId, isInitiator){
     const pc = new RTCPeerConnection();
+    peerConnections[peerId] = pc;
+
     localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
     pc.ontrack = (event) => {
@@ -174,35 +212,67 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
       audio.srcObject = event.streams[0];
     };
 
-    peerConnections[peerId] = pc;
-    // Note: Full signaling (offer/answer) via Firestore is needed for real multi-user audio
+    pc.onicecandidate = (event) => {
+      if(event.candidate){
+        db.collection("rooms").doc(currentRoom).collection("signals").add({
+          sender: userId,
+          target: peerId,
+          type: 'ice',
+          candidate: event.candidate
+        });
+      }
+    };
+
+    if(isInitiator){
+      pc.onnegotiationneeded = async () => {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        db.collection("rooms").doc(currentRoom).collection("signals").add({
+          sender: userId,
+          target: peerId,
+          type: 'offer',
+          offer: offer
+        });
+      };
+    }
+
+    return pc;
+  }
+
+  function removePeer(peerId){
+    const pc = peerConnections[peerId];
+    if(pc){
+      pc.close();
+      delete peerConnections[peerId];
+    }
+    const audio = document.getElementById('audio_' + peerId);
+    if(audio) audio.remove();
   }
 
   // ===========================
   // Leave Room
   // ===========================
-  function leaveRoom() {
+  function leaveRoom(){
     if(!currentRoom) return;
 
-    // Remove user from Firestore
     db.collection("rooms").doc(currentRoom).collection("users").doc(userId).delete();
-    currentRoom = null;
-    document.getElementById("roomUI").innerHTML = "";
+    if(roomType === 'chat' && messagesListener) messagesListener();
+    if(roomType === 'voice' && usersListener) usersListener();
 
-    // Stop local audio
+    Object.values(peerConnections).forEach(pc => pc.close());
+    peerConnections = {};
+
     if(localStream){
       localStream.getTracks().forEach(track => track.stop());
       localStream = null;
     }
+
+    currentRoom = null;
+    roomType = null;
+    document.getElementById("roomUI").innerHTML = "";
   }
 
-  // ===========================
-  // Cleanup on tab close
-  // ===========================
-  window.addEventListener("beforeunload", () => {
-    leaveRoom();
-  });
-
+  window.addEventListener("beforeunload", () => leaveRoom());
 </script>
 </body>
 </html>
