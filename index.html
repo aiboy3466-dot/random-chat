@@ -3,23 +3,30 @@
 <head>
   <title>Stealth Chat & Voice Rooms</title>
   <style>
-    /* ===== DARK STEALTH THEME ===== */
+    /* ===== FULL DARK STEALTH THEME ===== */
+    * { box-sizing: border-box; }
     body { 
       font-family: 'Segoe UI', sans-serif; 
-      background: #0f0f0f; 
-      color: #eee; 
+      background-color: #0a0a0a; 
+      color: #0ff; 
+      margin: 0; 
+      padding: 0; 
       display: flex; 
       flex-direction: column; 
       align-items: center; 
-      margin: 0; 
-      padding: 0; 
+      min-height: 100vh;
     }
     h2 { color: #0ff; margin-top: 20px; }
-    input, button { 
-      padding: 8px; margin: 5px; border-radius: 5px; border: none; 
+    input, button, select { 
+      padding: 8px; 
+      margin: 5px; 
+      border-radius: 5px; 
+      border: none; 
+      outline: none; 
+      font-size: 14px;
     }
-    input { background: #222; color: #0ff; }
-    button { background: #0ff; color: #000; cursor: pointer; }
+    input, select { background: #111; color: #0ff; }
+    button { background: #0ff; color: #000; font-weight: bold; cursor: pointer; }
     button:hover { background: #0cc; }
     #roomUI { margin: 20px; }
     .chatBox, .voiceBox { 
@@ -28,7 +35,7 @@
       background: #111; 
       width: 400px; 
       border-radius: 10px;
-      box-shadow: 0 0 10px #0ff;
+      box-shadow: 0 0 15px #0ff;
       margin-top: 10px;
       animation: fadeIn 0.5s;
     }
@@ -44,8 +51,9 @@
     .message { margin-bottom: 5px; }
     .message img { max-width: 100px; display: block; margin-top: 5px; border-radius: 5px; }
     audio { display: block; margin-top: 5px; border-radius: 5px; }
-    .notification { font-size: 0.9em; color: #0f0; }
-    .typing { font-size: 0.85em; color: #ff0; }
+    .notification { font-size: 0.9em; color: #0f0; margin-bottom: 5px; }
+    .typing { font-size: 0.85em; color: #ff0; margin-bottom: 5px; }
+    ::placeholder { color: #0ff; opacity: 0.6; }
     @keyframes fadeIn { from {opacity:0} to {opacity:1} }
   </style>
 </head>
@@ -64,10 +72,8 @@
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-storage-compat.js"></script>
 
 <script>
-  // ===========================
-  // Firebase setup - CHANGE THIS
-  // ===========================
-  const firebaseConfig = {
+  // ===== FIREBASE SETUP =====
+const firebaseConfig = {
 apiKey: "AIzaSyC3zgBQLFgUhHHJPlTNeyGobAilCVPEvBk",
 authDomain: "random-chat-2ed9a.firebaseapp.com",
 projectId: "random-chat-2ed9a",
@@ -79,21 +85,17 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
   const db = firebase.firestore();
   const storage = firebase.storage();
 
-  // ===========================
-  // Globals
-  // ===========================
+  // ===== GLOBALS =====
   let currentRoom = null;
   let userId = 'user_' + Math.floor(Math.random() * 1000000);
   let localStream = null;
   let peerConnections = {};
-  let roomType = null; // 'chat' or 'voice'
+  let roomType = null;
   let messagesListener = null;
   let usersListener = null;
   let typingTimeout;
 
-  // ===========================
-  // Join Chat Room
-  // ===========================
+  // ===== CHAT ROOM =====
   function joinChatRoom() {
     leaveRoom();
     const room = document.getElementById("roomName").value;
@@ -103,7 +105,6 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
 
     db.collection("rooms").doc(room).collection("users").doc(userId).set({ joined: Date.now() });
 
-    // Chat UI
     document.getElementById("roomUI").innerHTML = `
       <div class="chatBox">
         <div class="notification" id="notif"></div>
@@ -115,7 +116,6 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
       </div>
     `;
 
-    // Listen messages
     messagesListener = db.collection("rooms").doc(room).collection("messages")
       .orderBy("time").onSnapshot(snapshot => {
         const msgDiv = document.getElementById("messages");
@@ -136,7 +136,6 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
         });
       });
 
-    // Listen typing & join/leave notifications
     db.collection("rooms").doc(room).collection("users").onSnapshot(snapshot => {
       snapshot.docChanges().forEach(change => {
         const notif = document.getElementById("notif");
@@ -156,35 +155,28 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
     const text = document.getElementById("msgInput").value;
     const file = document.getElementById("imgInput").files[0];
     let imageURL = null;
-
     if(file){
       const ref = storage.ref().child(`images/${Date.now()}_${file.name}`);
       await ref.put(file);
       imageURL = await ref.getDownloadURL();
       document.getElementById("imgInput").value = '';
     }
-
     if(!text && !imageURL) return;
-
     db.collection("rooms").doc(currentRoom).collection("messages").add({
       user: userId,
       text: text,
       imageURL: imageURL,
       time: Date.now()
     });
-
     document.getElementById("msgInput").value = '';
   }
 
-  // Typing indicator
   function typingIndicator(){
     db.collection("rooms").doc(currentRoom).collection("users").doc(userId).update({typing: true});
     clearTimeout(typingTimeout);
     typingTimeout = setTimeout(()=>{ 
       db.collection("rooms").doc(currentRoom).collection("users").doc(userId).update({typing: false});
     },1000);
-
-    // Listen others typing
     db.collection("rooms").doc(currentRoom).collection("users").onSnapshot(snapshot => {
       let typingUsers = [];
       snapshot.forEach(doc => {
@@ -194,14 +186,11 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
     });
   }
 
-  // ===========================
-  // Voice Room
-  // ===========================
+  // ===== VOICE ROOM =====
   async function joinVoiceRoom(){
     leaveRoom();
     const room = document.getElementById("roomName").value;
     if(!room) return alert("Enter a room name");
-
     currentRoom = room;
     roomType = 'voice';
     db.collection("rooms").doc(room).collection("users").doc(userId).set({ joined: Date.now() });
@@ -218,9 +207,7 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
 
   async function startVoice(){
     localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
     const usersRef = db.collection("rooms").doc(currentRoom).collection("users");
-
     usersListener = usersRef.onSnapshot(snapshot => {
       snapshot.docChanges().forEach(change => {
         if(change.type === 'added' && change.doc.id !== userId){
@@ -233,7 +220,6 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
         }
       });
     });
-
     db.collection("rooms").doc(currentRoom).collection("signals").onSnapshot(snapshot => {
       snapshot.docChanges().forEach(async change=>{
         const data = change.doc.data();
@@ -263,7 +249,6 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
     const pc = new RTCPeerConnection();
     peerConnections[peerId] = pc;
     localStream.getTracks().forEach(track=>pc.addTrack(track,localStream));
-
     pc.ontrack = (event)=>{
       let audio = document.getElementById('audio_'+peerId);
       if(!audio){
@@ -274,7 +259,6 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
       }
       audio.srcObject = event.streams[0];
     };
-
     pc.onicecandidate = (event)=>{
       if(event.candidate){
         db.collection("rooms").doc(currentRoom).collection("signals").add({
@@ -282,7 +266,6 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
         });
       }
     };
-
     if(isInitiator){
       pc.onnegotiationneeded = async ()=>{
         const offer = await pc.createOffer();
@@ -292,7 +275,6 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
         });
       };
     }
-
     return pc;
   }
 
@@ -312,9 +294,7 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
     }
   }
 
-  // ===========================
-  // Leave Room
-  // ===========================
+  // ===== LEAVE ROOM =====
   function leaveRoom(){
     if(!currentRoom) return;
     db.collection("rooms").doc(currentRoom).collection("users").doc(userId).delete();
@@ -331,5 +311,6 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
 
   window.addEventListener("beforeunload",()=>leaveRoom());
 </script>
+
 </body>
 </html>
