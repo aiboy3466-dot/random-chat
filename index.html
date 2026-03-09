@@ -121,6 +121,7 @@ let name=document.getElementById("roomName").value.trim();
 if(!name)return;
 
 db.collection("rooms").doc(name).set({
+users:0,
 created:Date.now()
 });
 
@@ -136,26 +137,18 @@ let html="";
 
 snapshot.forEach(doc=>{
 
-let room=doc.id;
-
-db.collection("rooms").doc(room).collection("users")
-.get()
-.then(users=>{
-
-let count=users.size;
+let data=doc.data();
 
 html+=`
 <div class="room">
-<b>${room}</b> (${count} users)
-<button onclick="joinRoom('${room}')">Join</button>
+<b>${doc.id}</b> (${data.users || 0} users)
+<button onclick="joinRoom('${doc.id}')">Join</button>
 </div>
 `;
 
+});
+
 document.getElementById("rooms").innerHTML=html;
-
-});
-
-});
 
 });
 
@@ -163,19 +156,19 @@ document.getElementById("rooms").innerHTML=html;
 
 function joinRoom(room){
 
+if(currentRoom)return;
+
 currentRoom=room;
 
 document.getElementById("roomTitle").innerText="Room: "+room;
 
-db.collection("rooms")
-.doc(room)
-.collection("users")
-.doc(userId)
-.set({joined:Date.now()});
+let ref=db.collection("rooms").doc(room);
 
-db.collection("rooms")
-.doc(room)
-.collection("messages")
+ref.update({
+users:firebase.firestore.FieldValue.increment(1)
+});
+
+ref.collection("messages")
 .orderBy("time")
 .onSnapshot(snapshot=>{
 
@@ -213,29 +206,35 @@ document.getElementById("msg").value="";
 
 }
 
-window.addEventListener("beforeunload",leaveRoom);
-
 function leaveRoom(){
 
 if(!currentRoom)return;
 
-let roomRef=db.collection("rooms").doc(currentRoom);
+let ref=db.collection("rooms").doc(currentRoom);
 
-roomRef.collection("users").doc(userId).delete().then(()=>{
+ref.get().then(doc=>{
 
-roomRef.collection("users").get().then(snapshot=>{
+if(doc.exists){
 
-if(snapshot.size===0){
+let users=(doc.data().users||1)-1;
 
-roomRef.delete();
+if(users<=0){
+
+ref.delete();
+
+}else{
+
+ref.update({users:users});
+
+}
 
 }
 
 });
 
-});
-
 }
+
+window.addEventListener("beforeunload",leaveRoom);
 
 loadRooms();
 
