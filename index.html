@@ -1,13 +1,13 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Stealth Chat</title>
 <meta charset="UTF-8">
+<title>Stealth Chat</title>
 
 <style>
 
 body{
-background:#0a0a0a;
+background:#0b0b0b;
 color:white;
 font-family:Arial;
 text-align:center;
@@ -17,7 +17,7 @@ h1{
 color:#00ff9d;
 }
 
-input,button{
+input,button,select{
 padding:8px;
 margin:6px;
 border-radius:6px;
@@ -76,6 +76,7 @@ margin-top:6px;
 <br>
 
 <input id="roomName" placeholder="room name">
+<input id="roomPass" placeholder="password optional">
 
 <button onclick="createRoom()">Create Room</button>
 
@@ -96,10 +97,10 @@ margin-top:6px;
 <br>
 
 <button onclick="send()">Send</button>
+<button onclick="startVC()">Voice Chat</button>
 <button onclick="leave()">Leave</button>
 
 </div>
-
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
@@ -107,7 +108,6 @@ margin-top:6px;
 
 <script>
 
-const firebaseConfig={
 const firebaseConfig = {
 apiKey: "AIzaSyC3zgBQLFgUhHHJPlTNeyGobAilCVPEvBk",
 authDomain: "random-chat-2ed9a.firebaseapp.com",
@@ -124,27 +124,47 @@ const storage=firebase.storage()
 
 let username=""
 let currentRoom=""
+let roomPassword=""
 
 function setName(){
 
 username=document.getElementById("username").value
 
-alert("Username set to "+username)
+if(username===""){
+alert("enter username")
+return
+}
+
+alert("Username set: "+username)
 
 }
 
-function createRoom(){
+async function createRoom(){
+
+try{
 
 let room=document.getElementById("roomName").value
+let pass=document.getElementById("roomPass").value
 
 if(room===""){
 alert("enter room name")
 return
 }
 
-db.collection("rooms").doc(room).set({
+await db.collection("rooms").doc(room).set({
+password:pass,
 created:Date.now()
 })
+
+document.getElementById("roomName").value=""
+document.getElementById("roomPass").value=""
+
+}catch(e){
+
+console.error(e)
+alert("room creation failed")
+
+}
 
 }
 
@@ -158,13 +178,15 @@ roomsDiv.innerHTML=""
 
 snapshot.forEach(doc=>{
 
+let data=doc.data()
+
 let div=document.createElement("div")
 
 div.className="room"
 
-div.innerText=doc.id
+div.innerText=data.password?doc.id+" 🔒":doc.id
 
-div.onclick=()=>joinRoom(doc.id)
+div.onclick=()=>joinRoom(doc.id,data)
 
 roomsDiv.appendChild(div)
 
@@ -174,7 +196,21 @@ roomsDiv.appendChild(div)
 
 }
 
-function joinRoom(room){
+function joinRoom(room,data){
+
+if(data.password){
+
+let p=prompt("enter password")
+
+if(p!==data.password){
+
+alert("wrong password")
+
+return
+
+}
+
+}
 
 currentRoom=room
 
@@ -205,32 +241,28 @@ let m=doc.data()
 let div=document.createElement("div")
 
 if(m.text){
-
 div.innerText=m.user+": "+m.text
-
 }
 
 if(m.img){
-
 let img=document.createElement("img")
-
 img.src=m.img
-
 div.appendChild(img)
-
 }
 
 box.appendChild(div)
 
-box.scrollTop=box.scrollHeight
-
 })
+
+box.scrollTop=box.scrollHeight
 
 })
 
 }
 
 async function send(){
+
+try{
 
 let text=document.getElementById("message").value
 let file=document.getElementById("img").files[0]
@@ -247,7 +279,7 @@ imgURL=await ref.getDownloadURL()
 
 }
 
-db.collection("rooms")
+await db.collection("rooms")
 .doc(currentRoom)
 .collection("messages")
 .add({
@@ -262,6 +294,13 @@ time:Date.now()
 document.getElementById("message").value=""
 document.getElementById("img").value=""
 
+}catch(e){
+
+console.error(e)
+alert("message failed")
+
+}
+
 }
 
 function leave(){
@@ -269,6 +308,28 @@ function leave(){
 currentRoom=""
 
 document.getElementById("chat").style.display="none"
+
+}
+
+async function startVC(){
+
+try{
+
+let stream=await navigator.mediaDevices.getUserMedia({audio:true})
+
+let audio=new Audio()
+
+audio.srcObject=stream
+
+audio.play()
+
+alert("voice chat started")
+
+}catch(e){
+
+alert("microphone blocked")
+
+}
 
 }
 
