@@ -3,29 +3,26 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Stealth Chat & Voice</title>
+<title>Stealth Chat</title>
 <style>
-  body {
-    margin: 0; font-family: Arial, sans-serif; background: #111; color: #eee;
-  }
-  #container { display: flex; flex-direction: column; align-items: center; padding: 20px; }
-  h1 { color: #0f0; text-shadow: 0 0 5px #0f0; }
-  input, button { padding: 10px; margin: 5px; border-radius: 5px; border: none; }
-  input { width: 200px; }
-  button { cursor: pointer; background: #222; color: #0f0; }
-  button:hover { background: #333; }
-  #roomsList { margin-top: 20px; width: 100%; max-width: 400px; }
-  .roomItem { padding: 10px; margin: 5px 0; background: #222; border-radius: 5px; display: flex; justify-content: space-between; cursor: pointer; }
-  .locked { font-weight: bold; }
-  #chatBox, #voiceBox { display: none; flex-direction: column; align-items: stretch; width: 100%; max-width: 500px; margin-top: 20px; }
-  #messages { background: #111; height: 300px; overflow-y: auto; border: 1px solid #0f0; padding: 10px; margin-bottom: 10px; border-radius: 5px; }
-  .message { margin: 5px 0; }
-  #imageInput, #fileInput { margin: 5px 0; }
+  body { margin:0; font-family:sans-serif; background:#111; color:#eee; }
+  #container { display:flex; flex-direction:column; align-items:center; padding:20px; }
+  h1 { color:#0f0; text-shadow:0 0 5px #0f0; }
+  input, button, select { padding:10px; margin:5px; border-radius:5px; border:none; }
+  input { width:200px; }
+  button { cursor:pointer; background:#222; color:#0f0; }
+  button:hover { background:#333; }
+  #roomsList { margin-top:20px; width:100%; max-width:400px; }
+  .roomItem { padding:10px; margin:5px 0; background:#222; border-radius:5px; display:flex; justify-content:space-between; cursor:pointer; }
+  #chatBox, #voiceBox { display:none; flex-direction:column; align-items:stretch; width:100%; max-width:500px; margin-top:20px; }
+  #messages { background:#111; height:300px; overflow-y:auto; border:1px solid #0f0; padding:10px; margin-bottom:10px; border-radius:5px; }
+  .message { margin:5px 0; }
+  img { max-width:100%; border-radius:5px; }
 </style>
 </head>
 <body>
 <div id="container">
-  <h1>Stealth Chat & Voice</h1>
+  <h1>Stealth Chat</h1>
   
   <!-- Username -->
   <input type="text" id="username" placeholder="Enter your username">
@@ -49,7 +46,6 @@
     <div id="messages"></div>
     <input type="text" id="chatInput" placeholder="Type a message">
     <input type="file" id="imageInput" accept="image/*">
-    <input type="file" id="fileInput">
     <button id="sendBtn">Send</button>
     <button id="leaveBtn">Leave Room</button>
   </div>
@@ -68,7 +64,7 @@
 
 <script>
   // 🔑 Replace with your Firebase config
-const firebaseConfig = {
+  const firebaseConfig = {
 apiKey: "AIzaSyC3zgBQLFgUhHHJPlTNeyGobAilCVPEvBk",
 authDomain: "random-chat-2ed9a.firebaseapp.com",
 projectId: "random-chat-2ed9a",
@@ -83,11 +79,10 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
   let currentRoom = "";
   let currentType = "";
   let localStream = null;
-  const peers = {};
 
   document.getElementById("setUsernameBtn").onclick = () => {
     const val = document.getElementById("username").value.trim();
-    if(val) { username = val; alert("Username set: " + username); }
+    if(val){ username = val; alert("Username set: "+username);}
   };
 
   // Create room
@@ -97,7 +92,7 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
     const type = document.getElementById("roomType").value;
     if(!name) return alert("Enter a room name");
     db.ref("rooms/"+name).set({ password: pass, type });
-    alert("Room created: " + name);
+    alert("Room created: "+name);
   };
 
   // View rooms
@@ -118,8 +113,8 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
   };
 
   function joinRoom(name, type, pass) {
-    if(pass) {
-      const entered = prompt("Enter password for " + name);
+    if(pass){
+      const entered = prompt("Enter password for "+name);
       if(entered !== pass) return alert("Wrong password!");
     }
     currentRoom = name;
@@ -133,29 +128,30 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
   // Leave room
   document.getElementById("leaveBtn").onclick = () => {
     currentRoom = ""; currentType = "";
-    document.getElementById("chatBox").style.display = "none";
-    document.getElementById("messages").innerHTML = "";
+    document.getElementById("chatBox").style.display="none";
+    document.getElementById("messages").innerHTML="";
   };
   document.getElementById("leaveVoiceBtn").onclick = () => {
     currentRoom = ""; currentType = "";
-    document.getElementById("voiceBox").style.display = "none";
+    document.getElementById("voiceBox").style.display="none";
     if(localStream) localStream.getTracks().forEach(t=>t.stop());
   };
 
-  // Chat functions
+  // Chat
   function initChat() {
     const messagesDiv = document.getElementById("messages");
     const chatInput = document.getElementById("chatInput");
     const imageInput = document.getElementById("imageInput");
-    const fileInput = document.getElementById("fileInput");
     document.getElementById("sendBtn").onclick = () => {
       const text = chatInput.value.trim();
-      if(!text && !imageInput.files[0] && !fileInput.files[0]) return;
+      const imageFile = imageInput.files[0];
+      if(!text && !imageFile) return;
       const msgRef = db.ref("messages/"+currentRoom).push();
-      if(text) msgRef.set({ user: username, text, time: Date.now() });
-      if(imageInput.files[0]) msgRef.set({ user: username, image: URL.createObjectURL(imageInput.files[0]), time: Date.now() });
-      if(fileInput.files[0]) msgRef.set({ user: username, file: URL.createObjectURL(fileInput.files[0]), name: fileInput.files[0].name, time: Date.now() });
-      chatInput.value = ""; imageInput.value=""; fileInput.value="";
+      const msgData = { user: username, time: Date.now() };
+      if(text) msgData.text = text;
+      if(imageFile) msgData.image = URL.createObjectURL(imageFile);
+      msgRef.set(msgData);
+      chatInput.value=""; imageInput.value="";
     };
     db.ref("messages/"+currentRoom).on("value", snap => {
       messagesDiv.innerHTML = "";
@@ -164,22 +160,20 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
         const div = document.createElement("div");
         div.className = "message";
         if(m.text) div.textContent = `${m.user}: ${m.text}`;
-        if(m.image) { const img = document.createElement("img"); img.src=m.image; img.style.maxWidth="100%"; div.appendChild(img);}
-        if(m.file) { const a = document.createElement("a"); a.href=m.file; a.textContent=m.name; a.download=m.name; div.appendChild(a);}
+        if(m.image){ const img=document.createElement("img"); img.src=m.image; div.appendChild(img);}
         messagesDiv.appendChild(div);
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
       });
     });
   }
 
-  // Voice functions
+  // Voice
   async function initVoice() {
     if(!navigator.mediaDevices) return alert("Voice not supported");
     localStream = await navigator.mediaDevices.getUserMedia({ audio:true });
     document.getElementById("localAudio").srcObject = localStream;
-    // For simplicity: just local audio here. Full peer-to-peer needs WebRTC + signaling in Firebase
+    // To add multiple users talking together: need WebRTC + Firebase signaling
   }
-
 </script>
 </body>
 </html>
