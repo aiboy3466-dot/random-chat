@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="UTF-8">
 <title>Stealth Chat</title>
+<meta charset="UTF-8">
 
 <style>
 
@@ -17,7 +17,7 @@ h1{
 color:#00ff9d;
 }
 
-input,button,select{
+input,button{
 padding:8px;
 margin:6px;
 border-radius:6px;
@@ -37,7 +37,7 @@ margin-top:20px;
 background:#1a1a1a;
 padding:10px;
 margin:6px auto;
-width:250px;
+width:260px;
 border-radius:6px;
 cursor:pointer;
 }
@@ -76,16 +76,11 @@ margin-top:6px;
 <br>
 
 <input id="roomName" placeholder="room name">
-<input id="roomPass" placeholder="password optional">
-
-<select id="roomType">
-<option value="chat">Chat Room</option>
-<option value="voice">Voice Room</option>
-</select>
 
 <button onclick="createRoom()">Create Room</button>
 
 <h2>Rooms</h2>
+
 <div id="rooms"></div>
 
 <div id="chat">
@@ -105,12 +100,14 @@ margin-top:6px;
 
 </div>
 
+
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 
 <script>
 
+const firebaseConfig={
 const firebaseConfig = {
 apiKey: "AIzaSyC3zgBQLFgUhHHJPlTNeyGobAilCVPEvBk",
 authDomain: "random-chat-2ed9a.firebaseapp.com",
@@ -132,23 +129,21 @@ function setName(){
 
 username=document.getElementById("username").value
 
-alert("username set to "+username)
+alert("Username set to "+username)
 
 }
 
 function createRoom(){
 
 let room=document.getElementById("roomName").value
-let pass=document.getElementById("roomPass").value
-let type=document.getElementById("roomType").value
 
-if(room=="") return alert("enter room name")
+if(room===""){
+alert("enter room name")
+return
+}
 
 db.collection("rooms").doc(room).set({
-
-password:pass,
-type:type
-
+created:Date.now()
 })
 
 }
@@ -163,15 +158,13 @@ roomsDiv.innerHTML=""
 
 snapshot.forEach(doc=>{
 
-let data=doc.data()
-
 let div=document.createElement("div")
 
 div.className="room"
 
-div.innerText=data.password?doc.id+" 🔒":doc.id
+div.innerText=doc.id
 
-div.onclick=()=>joinRoom(doc.id,data)
+div.onclick=()=>joinRoom(doc.id)
 
 roomsDiv.appendChild(div)
 
@@ -181,21 +174,7 @@ roomsDiv.appendChild(div)
 
 }
 
-function joinRoom(room,data){
-
-if(data.password){
-
-let p=prompt("enter password")
-
-if(p!==data.password){
-
-alert("wrong password")
-
-return
-
-}
-
-}
+function joinRoom(room){
 
 currentRoom=room
 
@@ -209,7 +188,9 @@ listenMessages()
 
 function listenMessages(){
 
-db.collection("rooms").doc(currentRoom).collection("messages")
+db.collection("rooms")
+.doc(currentRoom)
+.collection("messages")
 .orderBy("time")
 .onSnapshot(snapshot=>{
 
@@ -252,7 +233,6 @@ box.scrollTop=box.scrollHeight
 async function send(){
 
 let text=document.getElementById("message").value
-
 let file=document.getElementById("img").files[0]
 
 let imgURL=""
