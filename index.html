@@ -3,9 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <title>Stealth Chat</title>
+
 <style>
+
 body{
-background:#0b0b0b;
+background:#0a0a0a;
 color:white;
 font-family:Arial;
 text-align:center;
@@ -17,9 +19,9 @@ color:#00ff9d;
 
 input,button,select{
 padding:8px;
-margin:5px;
-border:none;
+margin:6px;
 border-radius:6px;
+border:none;
 }
 
 button{
@@ -32,34 +34,35 @@ margin-top:20px;
 }
 
 .room{
-background:#1b1b1b;
+background:#1a1a1a;
 padding:10px;
-margin:5px auto;
+margin:6px auto;
 width:250px;
 border-radius:6px;
 cursor:pointer;
 }
 
-#chatBox,#voiceBox{
+#chat{
 display:none;
 margin-top:20px;
 }
 
 #messages{
-height:250px;
+height:300px;
 overflow-y:auto;
+background:black;
 border:1px solid #00ff9d;
 padding:10px;
-width:400px;
+width:420px;
 margin:auto;
-background:black;
 }
 
 img{
 max-width:200px;
 display:block;
-margin-top:5px;
+margin-top:6px;
 }
+
 </style>
 </head>
 
@@ -68,12 +71,13 @@ margin-top:5px;
 <h1>Stealth Chat</h1>
 
 <input id="username" placeholder="username">
-<button onclick="setName()">Set Name</button>
+<button onclick="setName()">Set Username</button>
 
 <br>
 
 <input id="roomName" placeholder="room name">
-<input id="roomPass" placeholder="password (optional)">
+<input id="roomPass" placeholder="password optional">
+
 <select id="roomType">
 <option value="chat">Chat Room</option>
 <option value="voice">Voice Room</option>
@@ -81,18 +85,18 @@ margin-top:5px;
 
 <button onclick="createRoom()">Create Room</button>
 
-<h2>Available Rooms</h2>
+<h2>Rooms</h2>
 <div id="rooms"></div>
 
-<div id="chatBox">
+<div id="chat">
 
 <h3 id="roomTitle"></h3>
 
 <div id="messages"></div>
 
-<input id="msg" placeholder="message">
+<input id="message" placeholder="message">
 
-<input type="file" id="imgUpload">
+<input type="file" id="img">
 
 <br>
 
@@ -101,21 +105,12 @@ margin-top:5px;
 
 </div>
 
-<div id="voiceBox">
-
-<h3 id="voiceTitle"></h3>
-
-<button onclick="startVC()">Start Voice</button>
-<button onclick="leave()">Leave</button>
-
-</div>
-
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 
 <script>
 
-const firebaseConfig={
 const firebaseConfig = {
 apiKey: "AIzaSyC3zgBQLFgUhHHJPlTNeyGobAilCVPEvBk",
 authDomain: "random-chat-2ed9a.firebaseapp.com",
@@ -127,17 +122,17 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
 
 firebase.initializeApp(firebaseConfig);
 
-const db=firebase.database();
+const db=firebase.firestore()
+const storage=firebase.storage()
 
-let name=""
+let username=""
 let currentRoom=""
-let roomType=""
 
 function setName(){
 
-name=document.getElementById("username").value
+username=document.getElementById("username").value
 
-alert("Name set to "+name)
+alert("username set to "+username)
 
 }
 
@@ -147,37 +142,38 @@ let room=document.getElementById("roomName").value
 let pass=document.getElementById("roomPass").value
 let type=document.getElementById("roomType").value
 
-if(room=="")return alert("enter room name")
+if(room=="") return alert("enter room name")
 
-db.ref("rooms/"+room).set({
-pass:pass,
+db.collection("rooms").doc(room).set({
+
+password:pass,
 type:type
+
 })
 
 }
 
 function loadRooms(){
 
-db.ref("rooms").on("value",snap=>{
+db.collection("rooms").onSnapshot(snapshot=>{
 
-let rooms=document.getElementById("rooms")
+let roomsDiv=document.getElementById("rooms")
 
-rooms.innerHTML=""
+roomsDiv.innerHTML=""
 
-snap.forEach(child=>{
+snapshot.forEach(doc=>{
 
-let r=child.key
-let data=child.val()
+let data=doc.data()
 
 let div=document.createElement("div")
 
 div.className="room"
 
-div.innerText=data.pass? r+" 🔒":r
+div.innerText=data.password?doc.id+" 🔒":doc.id
 
-div.onclick=()=>joinRoom(r,data)
+div.onclick=()=>joinRoom(doc.id,data)
 
-rooms.appendChild(div)
+roomsDiv.appendChild(div)
 
 })
 
@@ -187,11 +183,11 @@ rooms.appendChild(div)
 
 function joinRoom(room,data){
 
-if(data.pass){
+if(data.password){
 
-let p=prompt("Enter password")
+let p=prompt("enter password")
 
-if(p!==data.pass){
+if(p!==data.password){
 
 alert("wrong password")
 
@@ -202,38 +198,28 @@ return
 }
 
 currentRoom=room
-roomType=data.type
+
+document.getElementById("chat").style.display="block"
 
 document.getElementById("roomTitle").innerText=room
-document.getElementById("voiceTitle").innerText=room
-
-if(roomType=="chat"){
-
-document.getElementById("chatBox").style.display="block"
-document.getElementById("voiceBox").style.display="none"
 
 listenMessages()
-
-}else{
-
-document.getElementById("chatBox").style.display="none"
-document.getElementById("voiceBox").style.display="block"
-
-}
 
 }
 
 function listenMessages(){
 
-db.ref("messages/"+currentRoom).on("value",snap=>{
+db.collection("rooms").doc(currentRoom).collection("messages")
+.orderBy("time")
+.onSnapshot(snapshot=>{
 
 let box=document.getElementById("messages")
 
 box.innerHTML=""
 
-snap.forEach(c=>{
+snapshot.forEach(doc=>{
 
-let m=c.val()
+let m=doc.data()
 
 let div=document.createElement("div")
 
@@ -255,28 +241,46 @@ div.appendChild(img)
 
 box.appendChild(div)
 
+box.scrollTop=box.scrollHeight
+
 })
 
 })
 
 }
 
-function send(){
+async function send(){
 
-let text=document.getElementById("msg").value
+let text=document.getElementById("message").value
 
-let file=document.getElementById("imgUpload").files[0]
+let file=document.getElementById("img").files[0]
 
-let data={user:name}
+let imgURL=""
 
-if(text)data.text=text
+if(file){
 
-if(file)data.img=URL.createObjectURL(file)
+let ref=storage.ref("images/"+Date.now()+file.name)
 
-db.ref("messages/"+currentRoom).push(data)
+await ref.put(file)
 
-document.getElementById("msg").value=""
-document.getElementById("imgUpload").value=""
+imgURL=await ref.getDownloadURL()
+
+}
+
+db.collection("rooms")
+.doc(currentRoom)
+.collection("messages")
+.add({
+
+user:username,
+text:text,
+img:imgURL,
+time:Date.now()
+
+})
+
+document.getElementById("message").value=""
+document.getElementById("img").value=""
 
 }
 
@@ -284,20 +288,7 @@ function leave(){
 
 currentRoom=""
 
-document.getElementById("chatBox").style.display="none"
-document.getElementById("voiceBox").style.display="none"
-
-}
-
-async function startVC(){
-
-let stream=await navigator.mediaDevices.getUserMedia({audio:true})
-
-let audio=new Audio()
-
-audio.srcObject=stream
-
-audio.play()
+document.getElementById("chat").style.display="none"
 
 }
 
