@@ -1,179 +1,309 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Stealth Chat</title>
 <style>
-  body { margin:0; font-family:sans-serif; background:#111; color:#eee; }
-  #container { display:flex; flex-direction:column; align-items:center; padding:20px; }
-  h1 { color:#0f0; text-shadow:0 0 5px #0f0; }
-  input, button, select { padding:10px; margin:5px; border-radius:5px; border:none; }
-  input { width:200px; }
-  button { cursor:pointer; background:#222; color:#0f0; }
-  button:hover { background:#333; }
-  #roomsList { margin-top:20px; width:100%; max-width:400px; }
-  .roomItem { padding:10px; margin:5px 0; background:#222; border-radius:5px; display:flex; justify-content:space-between; cursor:pointer; }
-  #chatBox, #voiceBox { display:none; flex-direction:column; align-items:stretch; width:100%; max-width:500px; margin-top:20px; }
-  #messages { background:#111; height:300px; overflow-y:auto; border:1px solid #0f0; padding:10px; margin-bottom:10px; border-radius:5px; }
-  .message { margin:5px 0; }
-  img { max-width:100%; border-radius:5px; }
+body{
+background:#0b0b0b;
+color:white;
+font-family:Arial;
+text-align:center;
+}
+
+h1{
+color:#00ff9d;
+}
+
+input,button,select{
+padding:8px;
+margin:5px;
+border:none;
+border-radius:6px;
+}
+
+button{
+background:#00ff9d;
+cursor:pointer;
+}
+
+#rooms{
+margin-top:20px;
+}
+
+.room{
+background:#1b1b1b;
+padding:10px;
+margin:5px auto;
+width:250px;
+border-radius:6px;
+cursor:pointer;
+}
+
+#chatBox,#voiceBox{
+display:none;
+margin-top:20px;
+}
+
+#messages{
+height:250px;
+overflow-y:auto;
+border:1px solid #00ff9d;
+padding:10px;
+width:400px;
+margin:auto;
+background:black;
+}
+
+img{
+max-width:200px;
+display:block;
+margin-top:5px;
+}
 </style>
 </head>
+
 <body>
-<div id="container">
-  <h1>Stealth Chat</h1>
-  
-  <!-- Username -->
-  <input type="text" id="username" placeholder="Enter your username">
-  <button id="setUsernameBtn">Set Username</button>
 
-  <!-- Room Controls -->
-  <input type="text" id="roomName" placeholder="Room Name">
-  <input type="text" id="roomPassword" placeholder="Password (optional)">
-  <select id="roomType">
-    <option value="chat">Chat Room</option>
-    <option value="voice">Voice Room</option>
-  </select>
-  <button id="createRoomBtn">Create Room</button>
-  <button id="viewRoomsBtn">View Rooms</button>
+<h1>Stealth Chat</h1>
 
-  <!-- Room List -->
-  <div id="roomsList"></div>
+<input id="username" placeholder="username">
+<button onclick="setName()">Set Name</button>
 
-  <!-- Chat Box -->
-  <div id="chatBox">
-    <div id="messages"></div>
-    <input type="text" id="chatInput" placeholder="Type a message">
-    <input type="file" id="imageInput" accept="image/*">
-    <button id="sendBtn">Send</button>
-    <button id="leaveBtn">Leave Room</button>
-  </div>
+<br>
 
-  <!-- Voice Box -->
-  <div id="voiceBox">
-    <audio id="localAudio" autoplay muted></audio>
-    <div id="remoteAudios"></div>
-    <button id="leaveVoiceBtn">Leave Voice Room</button>
-  </div>
+<input id="roomName" placeholder="room name">
+<input id="roomPass" placeholder="password (optional)">
+<select id="roomType">
+<option value="chat">Chat Room</option>
+<option value="voice">Voice Room</option>
+</select>
+
+<button onclick="createRoom()">Create Room</button>
+
+<h2>Available Rooms</h2>
+<div id="rooms"></div>
+
+<div id="chatBox">
+
+<h3 id="roomTitle"></h3>
+
+<div id="messages"></div>
+
+<input id="msg" placeholder="message">
+
+<input type="file" id="imgUpload">
+
+<br>
+
+<button onclick="send()">Send</button>
+<button onclick="leave()">Leave</button>
+
 </div>
 
-<!-- Firebase -->
+<div id="voiceBox">
+
+<h3 id="voiceTitle"></h3>
+
+<button onclick="startVC()">Start Voice</button>
+<button onclick="leave()">Leave</button>
+
+</div>
+
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
 <script>
-  // 🔑 Replace with your Firebase config
-  const firebaseConfig = {
+
+const firebaseConfig={
+const firebaseConfig = {
 apiKey: "AIzaSyC3zgBQLFgUhHHJPlTNeyGobAilCVPEvBk",
 authDomain: "random-chat-2ed9a.firebaseapp.com",
 projectId: "random-chat-2ed9a",
 storageBucket: "random-chat-2ed9a.firebasestorage.app",
 messagingSenderId: "608975566065",
 appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
-  };
-  firebase.initializeApp(firebaseConfig);
-  const db = firebase.database();
+};
 
-  let username = "";
-  let currentRoom = "";
-  let currentType = "";
-  let localStream = null;
+firebase.initializeApp(firebaseConfig);
 
-  document.getElementById("setUsernameBtn").onclick = () => {
-    const val = document.getElementById("username").value.trim();
-    if(val){ username = val; alert("Username set: "+username);}
-  };
+const db=firebase.database();
 
-  // Create room
-  document.getElementById("createRoomBtn").onclick = () => {
-    const name = document.getElementById("roomName").value.trim();
-    const pass = document.getElementById("roomPassword").value.trim();
-    const type = document.getElementById("roomType").value;
-    if(!name) return alert("Enter a room name");
-    db.ref("rooms/"+name).set({ password: pass, type });
-    alert("Room created: "+name);
-  };
+let name=""
+let currentRoom=""
+let roomType=""
 
-  // View rooms
-  document.getElementById("viewRoomsBtn").onclick = () => {
-    db.ref("rooms").once("value", snap => {
-      const roomsList = document.getElementById("roomsList");
-      roomsList.innerHTML = "";
-      snap.forEach(child => {
-        const room = child.key;
-        const data = child.val();
-        const div = document.createElement("div");
-        div.className = "roomItem";
-        div.innerHTML = data.password ? `${room} 🔒` : room;
-        div.onclick = () => joinRoom(room, data.type, data.password);
-        roomsList.appendChild(div);
-      });
-    });
-  };
+function setName(){
 
-  function joinRoom(name, type, pass) {
-    if(pass){
-      const entered = prompt("Enter password for "+name);
-      if(entered !== pass) return alert("Wrong password!");
-    }
-    currentRoom = name;
-    currentType = type;
-    document.getElementById("chatBox").style.display = type==="chat"?"flex":"none";
-    document.getElementById("voiceBox").style.display = type==="voice"?"flex":"none";
-    if(type==="chat") initChat();
-    if(type==="voice") initVoice();
-  }
+name=document.getElementById("username").value
 
-  // Leave room
-  document.getElementById("leaveBtn").onclick = () => {
-    currentRoom = ""; currentType = "";
-    document.getElementById("chatBox").style.display="none";
-    document.getElementById("messages").innerHTML="";
-  };
-  document.getElementById("leaveVoiceBtn").onclick = () => {
-    currentRoom = ""; currentType = "";
-    document.getElementById("voiceBox").style.display="none";
-    if(localStream) localStream.getTracks().forEach(t=>t.stop());
-  };
+alert("Name set to "+name)
 
-  // Chat
-  function initChat() {
-    const messagesDiv = document.getElementById("messages");
-    const chatInput = document.getElementById("chatInput");
-    const imageInput = document.getElementById("imageInput");
-    document.getElementById("sendBtn").onclick = () => {
-      const text = chatInput.value.trim();
-      const imageFile = imageInput.files[0];
-      if(!text && !imageFile) return;
-      const msgRef = db.ref("messages/"+currentRoom).push();
-      const msgData = { user: username, time: Date.now() };
-      if(text) msgData.text = text;
-      if(imageFile) msgData.image = URL.createObjectURL(imageFile);
-      msgRef.set(msgData);
-      chatInput.value=""; imageInput.value="";
-    };
-    db.ref("messages/"+currentRoom).on("value", snap => {
-      messagesDiv.innerHTML = "";
-      snap.forEach(c => {
-        const m = c.val();
-        const div = document.createElement("div");
-        div.className = "message";
-        if(m.text) div.textContent = `${m.user}: ${m.text}`;
-        if(m.image){ const img=document.createElement("img"); img.src=m.image; div.appendChild(img);}
-        messagesDiv.appendChild(div);
-        messagesDiv.scrollTop = messagesDiv.scrollHeight;
-      });
-    });
-  }
+}
 
-  // Voice
-  async function initVoice() {
-    if(!navigator.mediaDevices) return alert("Voice not supported");
-    localStream = await navigator.mediaDevices.getUserMedia({ audio:true });
-    document.getElementById("localAudio").srcObject = localStream;
-    // To add multiple users talking together: need WebRTC + Firebase signaling
-  }
+function createRoom(){
+
+let room=document.getElementById("roomName").value
+let pass=document.getElementById("roomPass").value
+let type=document.getElementById("roomType").value
+
+if(room=="")return alert("enter room name")
+
+db.ref("rooms/"+room).set({
+pass:pass,
+type:type
+})
+
+}
+
+function loadRooms(){
+
+db.ref("rooms").on("value",snap=>{
+
+let rooms=document.getElementById("rooms")
+
+rooms.innerHTML=""
+
+snap.forEach(child=>{
+
+let r=child.key
+let data=child.val()
+
+let div=document.createElement("div")
+
+div.className="room"
+
+div.innerText=data.pass? r+" 🔒":r
+
+div.onclick=()=>joinRoom(r,data)
+
+rooms.appendChild(div)
+
+})
+
+})
+
+}
+
+function joinRoom(room,data){
+
+if(data.pass){
+
+let p=prompt("Enter password")
+
+if(p!==data.pass){
+
+alert("wrong password")
+
+return
+
+}
+
+}
+
+currentRoom=room
+roomType=data.type
+
+document.getElementById("roomTitle").innerText=room
+document.getElementById("voiceTitle").innerText=room
+
+if(roomType=="chat"){
+
+document.getElementById("chatBox").style.display="block"
+document.getElementById("voiceBox").style.display="none"
+
+listenMessages()
+
+}else{
+
+document.getElementById("chatBox").style.display="none"
+document.getElementById("voiceBox").style.display="block"
+
+}
+
+}
+
+function listenMessages(){
+
+db.ref("messages/"+currentRoom).on("value",snap=>{
+
+let box=document.getElementById("messages")
+
+box.innerHTML=""
+
+snap.forEach(c=>{
+
+let m=c.val()
+
+let div=document.createElement("div")
+
+if(m.text){
+
+div.innerText=m.user+": "+m.text
+
+}
+
+if(m.img){
+
+let img=document.createElement("img")
+
+img.src=m.img
+
+div.appendChild(img)
+
+}
+
+box.appendChild(div)
+
+})
+
+})
+
+}
+
+function send(){
+
+let text=document.getElementById("msg").value
+
+let file=document.getElementById("imgUpload").files[0]
+
+let data={user:name}
+
+if(text)data.text=text
+
+if(file)data.img=URL.createObjectURL(file)
+
+db.ref("messages/"+currentRoom).push(data)
+
+document.getElementById("msg").value=""
+document.getElementById("imgUpload").value=""
+
+}
+
+function leave(){
+
+currentRoom=""
+
+document.getElementById("chatBox").style.display="none"
+document.getElementById("voiceBox").style.display="none"
+
+}
+
+async function startVC(){
+
+let stream=await navigator.mediaDevices.getUserMedia({audio:true})
+
+let audio=new Audio()
+
+audio.srcObject=stream
+
+audio.play()
+
+}
+
+loadRooms()
+
 </script>
+
 </body>
 </html>
