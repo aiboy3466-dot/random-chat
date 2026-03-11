@@ -1,44 +1,31 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>StealthChat</title>
+<title>Stealth Chat</title>
 
 <style>
 
 body{
-background:#0b0b0b;
+background:#0f0f0f;
 color:white;
 font-family:Arial;
 text-align:center;
-margin:0;
 }
 
-header{
-background:#111;
-padding:15px;
-font-size:22px;
-color:#00ffa6;
-box-shadow:0 0 10px #000;
+h1{
+color:#00ff9c;
 }
 
-.container{
-margin-top:20px;
-}
-
-input{
+input,button{
 padding:8px;
+margin:6px;
 border-radius:6px;
 border:none;
-margin:5px;
 }
 
 button{
-padding:8px 14px;
-border:none;
-border-radius:6px;
-background:#00ffa6;
+background:#00ff9c;
 cursor:pointer;
-font-weight:bold;
 }
 
 #rooms{
@@ -46,30 +33,26 @@ margin-top:20px;
 }
 
 .room{
-background:#1c1c1c;
+background:#1b1b1b;
 padding:10px;
+margin:6px auto;
 width:260px;
-margin:8px auto;
-border-radius:8px;
+border-radius:6px;
 cursor:pointer;
 }
 
-.room:hover{
-background:#2a2a2a;
-}
-
-#chatUI{
+#chat{
 display:none;
 margin-top:20px;
 }
 
 #messages{
-background:black;
-border:1px solid #00ffa6;
 height:300px;
 width:420px;
 margin:auto;
 overflow-y:auto;
+background:black;
+border:1px solid #00ff9c;
 padding:10px;
 text-align:left;
 }
@@ -85,36 +68,27 @@ margin-top:5px;
 </head>
 <body>
 
-<header>Stealth Chat</header>
-
-<div class="container">
+<h1>Stealth Chat</h1>
 
 <input id="username" placeholder="username">
-<button onclick="setName()">Set Username</button>
+<button onclick="setUsername()">Set Username</button>
 
 <br>
 
 <input id="roomName" placeholder="room name">
-<input id="roomPass" placeholder="password optional">
-
 <button onclick="createRoom()">Create Room</button>
 
 <h3>Rooms</h3>
-
 <div id="rooms"></div>
 
-</div>
+<div id="chat">
 
-<div id="chatUI">
-
-<h2 id="roomTitle"></h2>
+<h3 id="roomTitle"></h3>
 
 <div id="messages"></div>
 
-<br>
-
-<input id="messageBox" placeholder="message">
-<input type="file" id="imgUpload">
+<input id="message" placeholder="message">
+<input type="file" id="image">
 
 <br>
 
@@ -123,19 +97,18 @@ margin-top:5px;
 
 </div>
 
-
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
 <script>
 
 const firebaseConfig = {
-  apiKey: "AIzaSyC3zgBQLFgUhHHJPlTNeyGobAilCVPEvBk",
-  authDomain: "random-chat-2ed9a.firebaseapp.com",
-  projectId: "random-chat-2ed9a",
-  storageBucket: "random-chat-2ed9a.firebasestorage.app",
-  messagingSenderId: "608975566065",
-  appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
+apiKey: "AIzaSyC3zgBQLFgUhHHJPlTNeyGobAilCVPEvBk",
+authDomain: "random-chat-2ed9a.firebaseapp.com",
+projectId: "random-chat-2ed9a",
+storageBucket: "random-chat-2ed9a.firebasestorage.app",
+messagingSenderId: "608975566065",
+appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
 };
 
 firebase.initializeApp(firebaseConfig);
@@ -145,35 +118,33 @@ const db = firebase.database();
 let username=""
 let currentRoom=""
 
-function setName(){
+function setUsername(){
 
 username=document.getElementById("username").value
 
-if(!username){
-alert("enter username")
+if(username==""){
+alert("Enter username")
 return
 }
 
-alert("username set")
+alert("Username set")
 
 }
 
 function createRoom(){
 
-let name=document.getElementById("roomName").value
-let pass=document.getElementById("roomPass").value
+let room=document.getElementById("roomName").value
 
-if(!name){
-alert("enter room name")
+if(room==""){
+alert("Enter room name")
 return
 }
 
-db.ref("rooms/"+name).set({
-password:pass || "",
+db.ref("rooms/"+room).set({
 created:Date.now()
 }).then(()=>{
 
-joinRoom(name,{password:pass})
+alert("Room created")
 
 })
 
@@ -190,15 +161,18 @@ roomsDiv.innerHTML=""
 snap.forEach(child=>{
 
 let room=child.key
-let data=child.val()
 
 let div=document.createElement("div")
 
 div.className="room"
 
-div.innerText=data.password? room+" 🔒":room
+div.innerText=room
 
-div.onclick=()=>joinRoom(room,data)
+div.onclick=function(){
+
+joinRoom(room)
+
+}
 
 roomsDiv.appendChild(div)
 
@@ -208,23 +182,12 @@ roomsDiv.appendChild(div)
 
 }
 
-function joinRoom(room,data){
-
-if(data.password){
-
-let p=prompt("Enter password")
-
-if(p!==data.password){
-alert("wrong password")
-return
-}
-
-}
+function joinRoom(room){
 
 currentRoom=room
 
-document.querySelector(".container").style.display="none"
-document.getElementById("chatUI").style.display="block"
+document.getElementById("chat").style.display="block"
+
 document.getElementById("roomTitle").innerText="Room: "+room
 
 listenMessages()
@@ -246,9 +209,13 @@ div.innerText=m.user+": "+m.text
 }
 
 if(m.img){
+
 let img=document.createElement("img")
+
 img.src=m.img
+
 div.appendChild(img)
+
 }
 
 document.getElementById("messages").appendChild(div)
@@ -259,8 +226,8 @@ document.getElementById("messages").appendChild(div)
 
 function sendMessage(){
 
-let text=document.getElementById("messageBox").value
-let file=document.getElementById("imgUpload").files[0]
+let text=document.getElementById("message").value
+let file=document.getElementById("image").files[0]
 
 let msg={
 user:username,
@@ -287,8 +254,8 @@ db.ref("messages/"+currentRoom).push(msg)
 
 }
 
-document.getElementById("messageBox").value=""
-document.getElementById("imgUpload").value=""
+document.getElementById("message").value=""
+document.getElementById("image").value=""
 
 }
 
@@ -298,8 +265,7 @@ currentRoom=""
 
 document.getElementById("messages").innerHTML=""
 
-document.getElementById("chatUI").style.display="none"
-document.querySelector(".container").style.display="block"
+document.getElementById("chat").style.display="none"
 
 }
 
