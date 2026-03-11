@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
+
 <title>Stealth Chat</title>
 
 <style>
@@ -16,7 +17,7 @@ h1{
 color:#00ff9c;
 }
 
-input,button{
+input,button,select{
 padding:8px;
 margin:5px;
 border-radius:6px;
@@ -73,14 +74,21 @@ margin-top:6px;
 <input id="username" placeholder="username">
 <button onclick="setName()">Set Username</button>
 
-<br>
+<br><br>
 
 <input id="roomName" placeholder="room name">
+
+<select id="roomType">
+<option value="chat">Chat Room</option>
+<option value="voice">Voice Room</option>
+</select>
+
 <input id="roomPassword" placeholder="password optional">
 
 <button onclick="createRoom()">Create Room</button>
 
 <h3>Rooms</h3>
+
 <div id="rooms"></div>
 
 <div id="chatBox">
@@ -89,22 +97,31 @@ margin-top:6px;
 
 <div id="messages"></div>
 
+<br>
+
 <input id="message" placeholder="message">
+
 <input type="file" id="imageUpload">
 
 <br>
 
 <button onclick="sendMessage()">Send</button>
+
+<button onclick="startVoice()">Start Voice</button>
+
 <button onclick="leaveRoom()">Leave Room</button>
 
 </div>
 
+
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
 
 <script>
 
 const firebaseConfig = {
+  
 apiKey: "AIzaSyC3zgBQLFgUhHHJPITNeyGobAiLCVPEvBk",
 authDomain: "random-chat-2ed9a.firebaseapp.com",
 databaseURL: "https://random-chat-2ed9a-default-rtdb.firebaseio.com",
@@ -112,42 +129,54 @@ projectId: "random-chat-2ed9a",
 storageBucket: "random-chat-2ed9a.firebasestorage.app",
 messagingSenderId: "608975566065",
 appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
-};
 
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
+}
+
+firebase.initializeApp(firebaseConfig)
+
+const db = firebase.database()
 
 let username=""
 let currentRoom=""
+
+
 
 function setName(){
 
 username=document.getElementById("username").value
 
 if(username==""){
-alert("Enter username")
+alert("enter username")
 return
 }
 
-alert("Username set")
+alert("username set")
 
 }
+
+
 
 function createRoom(){
 
 let room=document.getElementById("roomName").value
 let password=document.getElementById("roomPassword").value
+let type=document.getElementById("roomType").value
 
 if(room==""){
-alert("Enter room name")
+alert("enter room name")
 return
 }
 
 db.ref("rooms/"+room).set({
-password:password
+
+password:password,
+type:type
+
 })
 
 }
+
+
 
 function loadRooms(){
 
@@ -162,18 +191,30 @@ snap.forEach(child=>{
 let room=child.key
 let data=child.val()
 
+let icon="💬"
+
+if(data.type=="voice"){
+icon="🔊"
+}
+
 let div=document.createElement("div")
 
 div.className="room"
 
 if(data.password){
-div.innerText=room+" 🔒"
+
+div.innerText=room+" "+icon+" 🔒"
+
 }else{
-div.innerText=room
+
+div.innerText=room+" "+icon
+
 }
 
 div.onclick=function(){
+
 joinRoom(room,data)
+
 }
 
 roomsDiv.appendChild(div)
@@ -183,6 +224,8 @@ roomsDiv.appendChild(div)
 })
 
 }
+
+
 
 function joinRoom(room,data){
 
@@ -200,11 +243,16 @@ return
 currentRoom=room
 
 document.getElementById("chatBox").style.display="block"
+
 document.getElementById("roomTitle").innerText="Room: "+room
+
+document.getElementById("messages").innerHTML=""
 
 listenMessages()
 
 }
+
+
 
 function listenMessages(){
 
@@ -217,12 +265,15 @@ let m=snap.val()
 let div=document.createElement("div")
 
 if(m.text){
+
 div.innerText=m.user+": "+m.text
+
 }
 
 if(m.img){
 
 let img=document.createElement("img")
+
 img.src=m.img
 
 div.appendChild(img)
@@ -235,14 +286,15 @@ document.getElementById("messages").appendChild(div)
 
 }
 
+
+
 function sendMessage(){
 
 let text=document.getElementById("message").value
 let file=document.getElementById("imageUpload").files[0]
 
-let msg={
-user:username,
-text:text
+if(text=="" && !file){
+return
 }
 
 if(file){
@@ -251,9 +303,13 @@ let reader=new FileReader()
 
 reader.onload=function(e){
 
-msg.img=e.target.result
+db.ref("messages/"+currentRoom).push({
 
-db.ref("messages/"+currentRoom).push(msg)
+user:username,
+text:text,
+img:e.target.result
+
+})
 
 }
 
@@ -261,7 +317,12 @@ reader.readAsDataURL(file)
 
 }else{
 
-db.ref("messages/"+currentRoom).push(msg)
+db.ref("messages/"+currentRoom).push({
+
+user:username,
+text:text
+
+})
 
 }
 
@@ -270,14 +331,39 @@ document.getElementById("imageUpload").value=""
 
 }
 
+
+
+function startVoice(){
+
+navigator.mediaDevices.getUserMedia({audio:true})
+
+.then(stream=>{
+
+alert("Voice chat started (mic active)")
+
+})
+
+.catch(()=>{
+
+alert("Mic blocked")
+
+})
+
+}
+
+
+
 function leaveRoom(){
 
 currentRoom=""
 
 document.getElementById("messages").innerHTML=""
+
 document.getElementById("chatBox").style.display="none"
 
 }
+
+
 
 loadRooms()
 
