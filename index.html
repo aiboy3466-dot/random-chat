@@ -2,30 +2,29 @@
 <html>
 <head>
 <title>Stealth Chat</title>
-<meta charset="UTF-8">
 
 <style>
 
 body{
-background:#0a0a0a;
+background:#0f0f0f;
 color:white;
 font-family:Arial;
 text-align:center;
 }
 
 h1{
-color:#00ff9d;
+color:#00ff9c;
 }
 
 input,button{
 padding:8px;
-margin:6px;
+margin:5px;
 border-radius:6px;
 border:none;
 }
 
 button{
-background:#00ff9d;
+background:#00ff9c;
 cursor:pointer;
 }
 
@@ -42,19 +41,20 @@ border-radius:6px;
 cursor:pointer;
 }
 
-#chat{
+#chatBox{
 display:none;
 margin-top:20px;
 }
 
 #messages{
 height:300px;
-overflow-y:auto;
-background:black;
-border:1px solid #00ff9d;
-padding:10px;
 width:420px;
 margin:auto;
+overflow-y:auto;
+background:black;
+border:1px solid #00ff9c;
+padding:10px;
+text-align:left;
 }
 
 img{
@@ -64,8 +64,8 @@ margin-top:6px;
 }
 
 </style>
-</head>
 
+</head>
 <body>
 
 <h1>Stealth Chat</h1>
@@ -76,40 +76,38 @@ margin-top:6px;
 <br>
 
 <input id="roomName" placeholder="room name">
+<input id="roomPassword" placeholder="password optional">
 
 <button onclick="createRoom()">Create Room</button>
 
-<h2>Rooms</h2>
-
+<h3>Rooms</h3>
 <div id="rooms"></div>
 
-<div id="chat">
+<div id="chatBox">
 
 <h3 id="roomTitle"></h3>
 
 <div id="messages"></div>
 
 <input id="message" placeholder="message">
-
-<input type="file" id="img">
+<input type="file" id="imageUpload">
 
 <br>
 
-<button onclick="send()">Send</button>
-<button onclick="leave()">Leave</button>
+<button onclick="sendMessage()">Send</button>
+<button onclick="leaveRoom()">Leave Room</button>
 
 </div>
 
-
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
 <script>
 
-const firebaseConfig={
-apiKey: "AIzaSyC3zgBQLFgUhHHJPlTNeyGobAilCVPEvBk",
+const firebaseConfig = {
+apiKey: "AIzaSyC3zgBQLFgUhHHJPITNeyGobAiLCVPEvBk",
 authDomain: "random-chat-2ed9a.firebaseapp.com",
+databaseURL: "https://random-chat-2ed9a-default-rtdb.firebaseio.com",
 projectId: "random-chat-2ed9a",
 storageBucket: "random-chat-2ed9a.firebasestorage.app",
 messagingSenderId: "608975566065",
@@ -117,9 +115,7 @@ appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
 };
 
 firebase.initializeApp(firebaseConfig);
-
-const db=firebase.firestore()
-const storage=firebase.storage()
+const db = firebase.database();
 
 let username=""
 let currentRoom=""
@@ -128,42 +124,57 @@ function setName(){
 
 username=document.getElementById("username").value
 
-alert("Username set to "+username)
+if(username==""){
+alert("Enter username")
+return
+}
+
+alert("Username set")
 
 }
 
 function createRoom(){
 
 let room=document.getElementById("roomName").value
+let password=document.getElementById("roomPassword").value
 
-if(room===""){
-alert("enter room name")
+if(room==""){
+alert("Enter room name")
 return
 }
 
-db.collection("rooms").doc(room).set({
-created:Date.now()
+db.ref("rooms/"+room).set({
+password:password
 })
 
 }
 
 function loadRooms(){
 
-db.collection("rooms").onSnapshot(snapshot=>{
+db.ref("rooms").on("value",snap=>{
 
 let roomsDiv=document.getElementById("rooms")
 
 roomsDiv.innerHTML=""
 
-snapshot.forEach(doc=>{
+snap.forEach(child=>{
+
+let room=child.key
+let data=child.val()
 
 let div=document.createElement("div")
 
 div.className="room"
 
-div.innerText=doc.id
+if(data.password){
+div.innerText=room+" 🔒"
+}else{
+div.innerText=room
+}
 
-div.onclick=()=>joinRoom(doc.id)
+div.onclick=function(){
+joinRoom(room,data)
+}
 
 roomsDiv.appendChild(div)
 
@@ -173,13 +184,23 @@ roomsDiv.appendChild(div)
 
 }
 
-function joinRoom(room){
+function joinRoom(room,data){
+
+if(data.password){
+
+let p=prompt("Enter password")
+
+if(p!=data.password){
+alert("Wrong password")
+return
+}
+
+}
 
 currentRoom=room
 
-document.getElementById("chat").style.display="block"
-
-document.getElementById("roomTitle").innerText=room
+document.getElementById("chatBox").style.display="block"
+document.getElementById("roomTitle").innerText="Room: "+room
 
 listenMessages()
 
@@ -187,87 +208,74 @@ listenMessages()
 
 function listenMessages(){
 
-db.collection("rooms")
-.doc(currentRoom)
-.collection("messages")
-.orderBy("time")
-.onSnapshot(snapshot=>{
+db.ref("messages/"+currentRoom).off()
 
-let box=document.getElementById("messages")
+db.ref("messages/"+currentRoom).on("child_added",snap=>{
 
-box.innerHTML=""
-
-snapshot.forEach(doc=>{
-
-let m=doc.data()
+let m=snap.val()
 
 let div=document.createElement("div")
 
 if(m.text){
-
 div.innerText=m.user+": "+m.text
-
 }
 
 if(m.img){
 
 let img=document.createElement("img")
-
 img.src=m.img
 
 div.appendChild(img)
 
 }
 
-box.appendChild(div)
-
-box.scrollTop=box.scrollHeight
-
-})
+document.getElementById("messages").appendChild(div)
 
 })
 
 }
 
-async function send(){
+function sendMessage(){
 
 let text=document.getElementById("message").value
-let file=document.getElementById("img").files[0]
+let file=document.getElementById("imageUpload").files[0]
 
-let imgURL=""
+let msg={
+user:username,
+text:text
+}
 
 if(file){
 
-let ref=storage.ref("images/"+Date.now()+file.name)
+let reader=new FileReader()
 
-await ref.put(file)
+reader.onload=function(e){
 
-imgURL=await ref.getDownloadURL()
+msg.img=e.target.result
+
+db.ref("messages/"+currentRoom).push(msg)
 
 }
 
-db.collection("rooms")
-.doc(currentRoom)
-.collection("messages")
-.add({
+reader.readAsDataURL(file)
 
-user:username,
-text:text,
-img:imgURL,
-time:Date.now()
+}else{
 
-})
+db.ref("messages/"+currentRoom).push(msg)
+
+}
 
 document.getElementById("message").value=""
-document.getElementById("img").value=""
+document.getElementById("imageUpload").value=""
 
 }
 
-function leave(){
+function leaveRoom(){
 
 currentRoom=""
 
-document.getElementById("chat").style.display="none"
+document.getElementById("messages").innerHTML=""
+document.getElementById("chatBox").style.display="none"
 
 }
 
