@@ -6,19 +6,31 @@
 <style>
 
 body{
-background:#111;
+background:#0f0f0f;
 color:white;
 font-family:Arial;
 text-align:center;
 }
 
-.room{
-background:#222;
-padding:10px;
-margin:5px auto;
-width:250px;
-cursor:pointer;
+input,button,select{
+padding:8px;
+margin:5px;
 border-radius:6px;
+border:none;
+}
+
+button{
+background:#00ff9d;
+cursor:pointer;
+}
+
+.room{
+background:#1e1e1e;
+margin:6px auto;
+padding:10px;
+width:260px;
+border-radius:6px;
+cursor:pointer;
 }
 
 #messages{
@@ -26,8 +38,9 @@ height:300px;
 overflow-y:auto;
 background:black;
 margin:auto;
-width:400px;
+width:420px;
 padding:10px;
+text-align:left;
 }
 
 img{
@@ -51,31 +64,32 @@ margin-top:5px;
 <input id="roomName" placeholder="room name">
 
 <select id="roomType">
-<option value="chat">Chat Room</option>
-<option value="voice">Voice Room</option>
+<option value="chat">Chat Room 💬</option>
+<option value="voice">Voice Room 🔊</option>
 </select>
 
-<input id="roomPass" placeholder="password optional">
+<input id="roomPassword" placeholder="password optional">
 
 <button onclick="createRoom()">Create Room</button>
 
-<h3>Rooms</h3>
-
+<h3>Available Rooms</h3>
 <div id="rooms"></div>
 
-<div id="chatUI" style="display:none">
+<div id="chatBox" style="display:none">
 
 <h3 id="roomTitle"></h3>
 
 <div id="messages"></div>
 
-<input id="message">
-<input type="file" id="image">
+<br>
+
+<input id="message" placeholder="message">
+<input type="file" id="imageUpload">
 
 <br>
 
-<button onclick="send()">Send</button>
-<button onclick="leave()">Leave</button>
+<button onclick="sendMessage()">Send</button>
+<button onclick="leaveRoom()">Leave Room</button>
 
 </div>
 
@@ -84,39 +98,44 @@ margin-top:5px;
 
 <script>
 
-const firebaseConfig = {
-apiKey: "AIzaSyC3zgBQLFgUhHHJPlTNeyGobAilCVPEvBk",
-authDomain:"random-chat-2ed9a.firebaseapp.com",
-databaseURL:"https://random-chat-2ed9a-default-rtdb.firebaseio.com",
-projectId:"random-chat-2ed9a"
-}
+/* PASTE YOUR FIREBASE CONFIG HERE */
+const firebaseConfig = {const firebaseConfig = {
+  apiKey: "AIzaSyC3zgBQLFgUhHHJPlTNeyGobAilCVPEvBk",
+  authDomain: "random-chat-2ed9a.firebaseapp.com",
+  projectId: "random-chat-2ed9a",
+  storageBucket: "random-chat-2ed9a.firebasestorage.app",
+  messagingSenderId: "608975566065",
+  appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
+};
 
 firebase.initializeApp(firebaseConfig)
 
-const db=firebase.database()
+const db = firebase.database()
 
 let username=""
 let currentRoom=""
 
 function setUser(){
-
 username=document.getElementById("username").value
-
-alert("username set")
-
+alert("Username set")
 }
 
 function createRoom(){
 
 let name=document.getElementById("roomName").value
-let pass=document.getElementById("roomPass").value
+let pass=document.getElementById("roomPassword").value
 let type=document.getElementById("roomType").value
 
-db.ref("rooms/"+name).set({
+if(name==""){
+alert("enter room name")
+return
+}
 
+db.ref("rooms/"+name).set({
 password:pass,
 type:type
-
+}).then(()=>{
+alert("Room created")
 })
 
 }
@@ -128,10 +147,10 @@ db.ref("rooms").on("value",snap=>{
 let box=document.getElementById("rooms")
 box.innerHTML=""
 
-snap.forEach(r=>{
+snap.forEach(room=>{
 
-let data=r.val()
-let name=r.key
+let data=room.val()
+let name=room.key
 
 let div=document.createElement("div")
 div.className="room"
@@ -158,22 +177,28 @@ function joinRoom(name,data){
 
 if(data.password){
 
-let p=prompt("password")
+let p=prompt("Enter password")
 
-if(p!=data.password)return
+if(p!=data.password){
+alert("wrong password")
+return
+}
 
 }
 
 currentRoom=name
 
-document.getElementById("chatUI").style.display="block"
+document.getElementById("chatBox").style.display="block"
 document.getElementById("roomTitle").innerText=name
+document.getElementById("messages").innerHTML=""
 
-listen()
+listenMessages()
 
 }
 
-function listen(){
+function listenMessages(){
+
+db.ref("messages/"+currentRoom).off()
 
 db.ref("messages/"+currentRoom).on("child_added",snap=>{
 
@@ -189,7 +214,6 @@ if(m.img){
 
 let img=document.createElement("img")
 img.src=m.img
-
 div.appendChild(img)
 
 }
@@ -200,23 +224,21 @@ document.getElementById("messages").appendChild(div)
 
 }
 
-function send(){
+function sendMessage(){
 
 let text=document.getElementById("message").value
-let file=document.getElementById("image").files[0]
+let file=document.getElementById("imageUpload").files[0]
 
 if(file){
 
 let reader=new FileReader()
 
-reader.onload=e=>{
+reader.onload=function(e){
 
 db.ref("messages/"+currentRoom).push({
-
 user:username,
 text:text,
 img:e.target.result
-
 })
 
 }
@@ -226,22 +248,21 @@ reader.readAsDataURL(file)
 }else{
 
 db.ref("messages/"+currentRoom).push({
-
 user:username,
 text:text
-
 })
 
 }
 
+document.getElementById("message").value=""
+document.getElementById("imageUpload").value=""
+
 }
 
-function leave(){
+function leaveRoom(){
 
 currentRoom=""
-
-document.getElementById("messages").innerHTML=""
-document.getElementById("chatUI").style.display="none"
+document.getElementById("chatBox").style.display="none"
 
 }
 
