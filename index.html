@@ -1,22 +1,23 @@
 <!DOCTYPE html>
 <html>
 <head>
+<meta charset="UTF-8">
 <title>Stealth Chat</title>
 
 <style>
 
 body{
-background:#0f0f0f;
+background:#0d0d0d;
 color:white;
 font-family:Arial;
 text-align:center;
 }
 
 h1{
-color:#00ff9c;
+color:#00ffa6;
 }
 
-input,button{
+input,button,select{
 padding:8px;
 margin:5px;
 border-radius:6px;
@@ -24,7 +25,7 @@ border:none;
 }
 
 button{
-background:#00ff9c;
+background:#00ffa6;
 cursor:pointer;
 }
 
@@ -33,7 +34,7 @@ margin-top:20px;
 }
 
 .room{
-background:#1a1a1a;
+background:#1b1b1b;
 padding:10px;
 margin:6px auto;
 width:260px;
@@ -52,7 +53,7 @@ width:420px;
 margin:auto;
 overflow-y:auto;
 background:black;
-border:1px solid #00ff9c;
+border:1px solid #00ffa6;
 padding:10px;
 text-align:left;
 }
@@ -60,7 +61,7 @@ text-align:left;
 img{
 max-width:200px;
 display:block;
-margin-top:6px;
+margin-top:5px;
 }
 
 </style>
@@ -71,16 +72,23 @@ margin-top:6px;
 <h1>Stealth Chat</h1>
 
 <input id="username" placeholder="username">
-<button onclick="setName()">Set Username</button>
+<button onclick="setUsername()">Set Username</button>
 
-<br>
+<br><br>
 
 <input id="roomName" placeholder="room name">
+
+<select id="roomType">
+<option value="chat">Chat Room 💬</option>
+<option value="voice">Voice Room 🔊</option>
+</select>
+
 <input id="roomPassword" placeholder="password optional">
 
 <button onclick="createRoom()">Create Room</button>
 
-<h3>Rooms</h3>
+<h3>Available Rooms</h3>
+
 <div id="rooms"></div>
 
 <div id="chatBox">
@@ -89,12 +97,15 @@ margin-top:6px;
 
 <div id="messages"></div>
 
+<br>
+
 <input id="message" placeholder="message">
 <input type="file" id="imageUpload">
 
 <br>
 
 <button onclick="sendMessage()">Send</button>
+<button onclick="startVoice()">Start Voice</button>
 <button onclick="leaveRoom()">Leave Room</button>
 
 </div>
@@ -105,6 +116,7 @@ margin-top:6px;
 <script>
 
 const firebaseConfig = {
+  
 apiKey: "AIzaSyC3zgBQLFgUhHHJPITNeyGobAiLCVPEvBk",
 authDomain: "random-chat-2ed9a.firebaseapp.com",
 databaseURL: "https://random-chat-2ed9a-default-rtdb.firebaseio.com",
@@ -112,15 +124,17 @@ projectId: "random-chat-2ed9a",
 storageBucket: "random-chat-2ed9a.firebasestorage.app",
 messagingSenderId: "608975566065",
 appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
+
 };
 
 firebase.initializeApp(firebaseConfig);
+
 const db = firebase.database();
 
 let username=""
 let currentRoom=""
 
-function setName(){
+function setUsername(){
 
 username=document.getElementById("username").value
 
@@ -137,6 +151,7 @@ function createRoom(){
 
 let room=document.getElementById("roomName").value
 let password=document.getElementById("roomPassword").value
+let type=document.getElementById("roomType").value
 
 if(room==""){
 alert("Enter room name")
@@ -144,7 +159,10 @@ return
 }
 
 db.ref("rooms/"+room).set({
-password:password
+
+password: password || "",
+type: type
+
 })
 
 }
@@ -162,14 +180,20 @@ snap.forEach(child=>{
 let room=child.key
 let data=child.val()
 
+let icon="💬"
+
+if(data.type=="voice"){
+icon="🔊"
+}
+
 let div=document.createElement("div")
 
 div.className="room"
 
-if(data.password){
-div.innerText=room+" 🔒"
+if(data.password && data.password!=""){
+div.innerText=room+" "+icon+" 🔒"
 }else{
-div.innerText=room
+div.innerText=room+" "+icon
 }
 
 div.onclick=function(){
@@ -186,7 +210,7 @@ roomsDiv.appendChild(div)
 
 function joinRoom(room,data){
 
-if(data.password){
+if(data.password && data.password!=""){
 
 let p=prompt("Enter password")
 
@@ -201,6 +225,8 @@ currentRoom=room
 
 document.getElementById("chatBox").style.display="block"
 document.getElementById("roomTitle").innerText="Room: "+room
+
+document.getElementById("messages").innerHTML=""
 
 listenMessages()
 
@@ -224,7 +250,6 @@ if(m.img){
 
 let img=document.createElement("img")
 img.src=m.img
-
 div.appendChild(img)
 
 }
@@ -240,9 +265,8 @@ function sendMessage(){
 let text=document.getElementById("message").value
 let file=document.getElementById("imageUpload").files[0]
 
-let msg={
-user:username,
-text:text
+if(text=="" && !file){
+return
 }
 
 if(file){
@@ -251,9 +275,13 @@ let reader=new FileReader()
 
 reader.onload=function(e){
 
-msg.img=e.target.result
+db.ref("messages/"+currentRoom).push({
 
-db.ref("messages/"+currentRoom).push(msg)
+user:username,
+text:text,
+img:e.target.result
+
+})
 
 }
 
@@ -261,12 +289,33 @@ reader.readAsDataURL(file)
 
 }else{
 
-db.ref("messages/"+currentRoom).push(msg)
+db.ref("messages/"+currentRoom).push({
+
+user:username,
+text:text
+
+})
 
 }
 
 document.getElementById("message").value=""
 document.getElementById("imageUpload").value=""
+
+}
+
+function startVoice(){
+
+navigator.mediaDevices.getUserMedia({audio:true})
+.then(()=>{
+
+alert("Microphone started")
+
+})
+.catch(()=>{
+
+alert("Mic permission blocked")
+
+})
 
 }
 
