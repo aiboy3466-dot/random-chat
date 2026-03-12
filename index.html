@@ -1,61 +1,33 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="UTF-8">
 <title>Stealth Chat</title>
 
 <style>
 
 body{
-background:#0d0d0d;
+background:#111;
 color:white;
 font-family:Arial;
 text-align:center;
 }
 
-h1{
-color:#00ffa6;
-}
-
-input,button,select{
-padding:8px;
-margin:5px;
-border-radius:6px;
-border:none;
-}
-
-button{
-background:#00ffa6;
-cursor:pointer;
-}
-
-#rooms{
-margin-top:20px;
-}
-
 .room{
-background:#1b1b1b;
+background:#222;
 padding:10px;
-margin:6px auto;
-width:260px;
-border-radius:6px;
+margin:5px auto;
+width:250px;
 cursor:pointer;
-}
-
-#chatBox{
-display:none;
-margin-top:20px;
+border-radius:6px;
 }
 
 #messages{
 height:300px;
-width:420px;
-margin:auto;
 overflow-y:auto;
 background:black;
-border:1px solid #00ffa6;
+margin:auto;
+width:400px;
 padding:10px;
-text-align:left;
 }
 
 img{
@@ -72,41 +44,38 @@ margin-top:5px;
 <h1>Stealth Chat</h1>
 
 <input id="username" placeholder="username">
-<button onclick="setUsername()">Set Username</button>
+<button onclick="setUser()">Set Username</button>
 
 <br><br>
 
 <input id="roomName" placeholder="room name">
 
 <select id="roomType">
-<option value="chat">Chat Room 💬</option>
-<option value="voice">Voice Room 🔊</option>
+<option value="chat">Chat Room</option>
+<option value="voice">Voice Room</option>
 </select>
 
-<input id="roomPassword" placeholder="password optional">
+<input id="roomPass" placeholder="password optional">
 
 <button onclick="createRoom()">Create Room</button>
 
-<h3>Available Rooms</h3>
+<h3>Rooms</h3>
 
 <div id="rooms"></div>
 
-<div id="chatBox">
+<div id="chatUI" style="display:none">
 
 <h3 id="roomTitle"></h3>
 
 <div id="messages"></div>
 
-<br>
-
-<input id="message" placeholder="message">
-<input type="file" id="imageUpload">
+<input id="message">
+<input type="file" id="image">
 
 <br>
 
-<button onclick="sendMessage()">Send</button>
-<button onclick="startVoice()">Start Voice</button>
-<button onclick="leaveRoom()">Leave Room</button>
+<button onclick="send()">Send</button>
+<button onclick="leave()">Leave</button>
 
 </div>
 
@@ -116,52 +85,37 @@ margin-top:5px;
 <script>
 
 const firebaseConfig = {
-  
-apiKey: "AIzaSyC3zgBQLFgUhHHJPITNeyGobAiLCVPEvBk",
-authDomain: "random-chat-2ed9a.firebaseapp.com",
-databaseURL: "https://random-chat-2ed9a-default-rtdb.firebaseio.com",
-projectId: "random-chat-2ed9a",
-storageBucket: "random-chat-2ed9a.firebasestorage.app",
-messagingSenderId: "608975566065",
-appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
+apiKey: "AIzaSyC3zgBQLFgUhHHJPlTNeyGobAilCVPEvBk",
+authDomain:"random-chat-2ed9a.firebaseapp.com",
+databaseURL:"https://random-chat-2ed9a-default-rtdb.firebaseio.com",
+projectId:"random-chat-2ed9a"
+}
 
-};
+firebase.initializeApp(firebaseConfig)
 
-firebase.initializeApp(firebaseConfig);
-
-const db = firebase.database();
+const db=firebase.database()
 
 let username=""
 let currentRoom=""
 
-function setUsername(){
+function setUser(){
 
 username=document.getElementById("username").value
 
-if(username==""){
-alert("Enter username")
-return
-}
-
-alert("Username set")
+alert("username set")
 
 }
 
 function createRoom(){
 
-let room=document.getElementById("roomName").value
-let password=document.getElementById("roomPassword").value
+let name=document.getElementById("roomName").value
+let pass=document.getElementById("roomPass").value
 let type=document.getElementById("roomType").value
 
-if(room==""){
-alert("Enter room name")
-return
-}
+db.ref("rooms/"+name).set({
 
-db.ref("rooms/"+room).set({
-
-password: password || "",
-type: type
+password:pass,
+type:type
 
 })
 
@@ -171,36 +125,28 @@ function loadRooms(){
 
 db.ref("rooms").on("value",snap=>{
 
-let roomsDiv=document.getElementById("rooms")
+let box=document.getElementById("rooms")
+box.innerHTML=""
 
-roomsDiv.innerHTML=""
+snap.forEach(r=>{
 
-snap.forEach(child=>{
-
-let room=child.key
-let data=child.val()
-
-let icon="💬"
-
-if(data.type=="voice"){
-icon="🔊"
-}
+let data=r.val()
+let name=r.key
 
 let div=document.createElement("div")
-
 div.className="room"
 
-if(data.password && data.password!=""){
-div.innerText=room+" "+icon+" 🔒"
+let icon=data.type=="voice"?"🔊":"💬"
+
+if(data.password){
+div.innerText=name+" "+icon+" 🔒"
 }else{
-div.innerText=room+" "+icon
+div.innerText=name+" "+icon
 }
 
-div.onclick=function(){
-joinRoom(room,data)
-}
+div.onclick=()=>joinRoom(name,data)
 
-roomsDiv.appendChild(div)
+box.appendChild(div)
 
 })
 
@@ -208,33 +154,26 @@ roomsDiv.appendChild(div)
 
 }
 
-function joinRoom(room,data){
+function joinRoom(name,data){
 
-if(data.password && data.password!=""){
+if(data.password){
 
-let p=prompt("Enter password")
+let p=prompt("password")
 
-if(p!=data.password){
-alert("Wrong password")
-return
-}
+if(p!=data.password)return
 
 }
 
-currentRoom=room
+currentRoom=name
 
-document.getElementById("chatBox").style.display="block"
-document.getElementById("roomTitle").innerText="Room: "+room
+document.getElementById("chatUI").style.display="block"
+document.getElementById("roomTitle").innerText=name
 
-document.getElementById("messages").innerHTML=""
-
-listenMessages()
+listen()
 
 }
 
-function listenMessages(){
-
-db.ref("messages/"+currentRoom).off()
+function listen(){
 
 db.ref("messages/"+currentRoom).on("child_added",snap=>{
 
@@ -250,6 +189,7 @@ if(m.img){
 
 let img=document.createElement("img")
 img.src=m.img
+
 div.appendChild(img)
 
 }
@@ -260,20 +200,16 @@ document.getElementById("messages").appendChild(div)
 
 }
 
-function sendMessage(){
+function send(){
 
 let text=document.getElementById("message").value
-let file=document.getElementById("imageUpload").files[0]
-
-if(text=="" && !file){
-return
-}
+let file=document.getElementById("image").files[0]
 
 if(file){
 
 let reader=new FileReader()
 
-reader.onload=function(e){
+reader.onload=e=>{
 
 db.ref("messages/"+currentRoom).push({
 
@@ -298,33 +234,14 @@ text:text
 
 }
 
-document.getElementById("message").value=""
-document.getElementById("imageUpload").value=""
-
 }
 
-function startVoice(){
-
-navigator.mediaDevices.getUserMedia({audio:true})
-.then(()=>{
-
-alert("Microphone started")
-
-})
-.catch(()=>{
-
-alert("Mic permission blocked")
-
-})
-
-}
-
-function leaveRoom(){
+function leave(){
 
 currentRoom=""
 
 document.getElementById("messages").innerHTML=""
-document.getElementById("chatBox").style.display="none"
+document.getElementById("chatUI").style.display="none"
 
 }
 
