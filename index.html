@@ -97,7 +97,7 @@ margin-top:6px;
 
 <button onclick="sendMessage()">Send</button>
 <button onclick="leaveRoom()">Leave Room</button>
-
+<button onclick="startVoice()">Enable Mic</button>
 </div>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -123,7 +123,15 @@ const db = firebase.database();
 
 let username=""
 let currentRoom=""
+  
+let localStream
+let peerConnection
 
+const servers = {
+  iceServers: [
+    { urls: "stun:stun.l.google.com:19302" }
+  ]
+}
 function setUser(){
 
 username=document.getElementById("username").value
@@ -188,7 +196,12 @@ box.appendChild(div)
 }
 
 function joinRoom(name,data){
-
+  
+if(username==""){
+alert("Set username first")
+return
+}
+  
 if(data.password){
 
 let p=prompt("Enter password")
@@ -236,7 +249,8 @@ div.appendChild(img)
 }
 
 document.getElementById("messages").appendChild(div)
-
+document.getElementById("messages").scrollTop =
+document.getElementById("messages").scrollHeight
 })
 
 }
@@ -292,7 +306,37 @@ document.getElementById("chatUI").style.display="none"
 }
 
 loadRooms()
+async function startVoice(){
 
+localStream = await navigator.mediaDevices.getUserMedia({
+audio:true
+})
+
+const audio=document.createElement("audio")
+audio.srcObject=localStream
+audio.muted=true
+audio.play()
+
+alert("Microphone enabled")
+
+}
+
+async function startCall(){
+
+peerConnection=new RTCPeerConnection(servers)
+
+localStream.getTracks().forEach(track=>{
+peerConnection.addTrack(track,localStream)
+})
+
+peerConnection.ontrack=event=>{
+const audio=document.createElement("audio")
+audio.srcObject=event.streams[0]
+audio.autoplay=true
+document.body.appendChild(audio)
+}
+
+}
 </script>
 
 </body>
