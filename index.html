@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
+
 <title>Stealth Chat</title>
 
 <style>
@@ -12,6 +13,10 @@ font-family:Arial;
 text-align:center;
 }
 
+h1{
+color:#00ffa2;
+}
+
 input,button,select{
 padding:8px;
 margin:5px;
@@ -20,14 +25,14 @@ border:none;
 }
 
 button{
-background:#00ff9d;
+background:#00ffa2;
 cursor:pointer;
 }
 
 .room{
-background:#1e1e1e;
-margin:6px auto;
+background:#1c1c1c;
 padding:10px;
+margin:6px auto;
 width:260px;
 border-radius:6px;
 cursor:pointer;
@@ -35,10 +40,10 @@ cursor:pointer;
 
 #messages{
 height:300px;
+width:420px;
+margin:auto;
 overflow-y:auto;
 background:black;
-margin:auto;
-width:420px;
 padding:10px;
 text-align:left;
 }
@@ -46,12 +51,13 @@ text-align:left;
 img{
 max-width:200px;
 display:block;
-margin-top:5px;
+margin-top:6px;
 }
 
 </style>
 
 </head>
+
 <body>
 
 <h1>Stealth Chat</h1>
@@ -72,10 +78,11 @@ margin-top:5px;
 
 <button onclick="createRoom()">Create Room</button>
 
-<h3>Available Rooms</h3>
+<h3>Rooms</h3>
+
 <div id="rooms"></div>
 
-<div id="chatBox" style="display:none">
+<div id="chatUI" style="display:none">
 
 <h3 id="roomTitle"></h3>
 
@@ -99,26 +106,30 @@ margin-top:5px;
 <script>
 
 /* PASTE YOUR FIREBASE CONFIG HERE */
+
 const firebaseConfig = {
-  apiKey: "AIzaSyC3zgBQLFgUhHHJPLTneyGobAiICVPEvBk",
-  authDomain: "random-chat-2ed9a.firebaseapp.com",
-  databaseURL: "https://random-chat-2ed9a-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "random-chat-2ed9a",
-  storageBucket: "random-chat-2ed9a.appspot.com",
-  messagingSenderId: "608975566065",
-  appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
+apiKey: "AIzaSyC3zgBQLFgUhHHJPLTneyGobAiICVPEvBk",
+authDomain: "random-chat-2ed9a.firebaseapp.com",
+databaseURL: "https://random-chat-2ed9a-default-rtdb.asia-southeast1.firebasedatabase.app",
+projectId: "random-chat-2ed9a",
+storageBucket: "random-chat-2ed9a.appspot.com",
+messagingSenderId: "608975566065",
+appId: "1:608975566065:web:e06cabb8b2286b3ca2a550"
 };
 
-firebase.initializeApp(firebaseConfig)
+firebase.initializeApp(firebaseConfig);
 
-const db = firebase.database()
+const db = firebase.database();
 
 let username=""
 let currentRoom=""
 
 function setUser(){
+
 username=document.getElementById("username").value
+
 alert("Username set")
+
 }
 
 function createRoom(){
@@ -128,15 +139,16 @@ let pass=document.getElementById("roomPassword").value
 let type=document.getElementById("roomType").value
 
 if(name==""){
-alert("enter room name")
+alert("Enter room name")
 return
 }
 
 db.ref("rooms/"+name).set({
+
 password:pass,
-type:type
-}).then(()=>{
-alert("Room created")
+type:type,
+users:0
+
 })
 
 }
@@ -146,6 +158,7 @@ function loadRooms(){
 db.ref("rooms").on("value",snap=>{
 
 let box=document.getElementById("rooms")
+
 box.innerHTML=""
 
 snap.forEach(room=>{
@@ -153,15 +166,15 @@ snap.forEach(room=>{
 let data=room.val()
 let name=room.key
 
+let icon=data.type=="voice"?"🔊":"💬"
+
 let div=document.createElement("div")
 div.className="room"
 
-let icon=data.type=="voice"?"🔊":"💬"
-
 if(data.password){
-div.innerText=name+" "+icon+" 🔒"
+div.innerText=name+" "+icon+" 🔒 ("+data.users+" users)"
 }else{
-div.innerText=name+" "+icon
+div.innerText=name+" "+icon+" ("+data.users+" users)"
 }
 
 div.onclick=()=>joinRoom(name,data)
@@ -181,7 +194,7 @@ if(data.password){
 let p=prompt("Enter password")
 
 if(p!=data.password){
-alert("wrong password")
+alert("Wrong password")
 return
 }
 
@@ -189,8 +202,11 @@ return
 
 currentRoom=name
 
-document.getElementById("chatBox").style.display="block"
+db.ref("rooms/"+name+"/users").transaction(n=> (n||0)+1)
+
+document.getElementById("chatUI").style.display="block"
 document.getElementById("roomTitle").innerText=name
+
 document.getElementById("messages").innerHTML=""
 
 listenMessages()
@@ -237,9 +253,11 @@ let reader=new FileReader()
 reader.onload=function(e){
 
 db.ref("messages/"+currentRoom).push({
+
 user:username,
 text:text,
 img:e.target.result
+
 })
 
 }
@@ -249,8 +267,10 @@ reader.readAsDataURL(file)
 }else{
 
 db.ref("messages/"+currentRoom).push({
+
 user:username,
 text:text
+
 })
 
 }
@@ -262,8 +282,12 @@ document.getElementById("imageUpload").value=""
 
 function leaveRoom(){
 
+db.ref("rooms/"+currentRoom+"/users").transaction(n=> (n||1)-1)
+
 currentRoom=""
-document.getElementById("chatBox").style.display="none"
+
+document.getElementById("messages").innerHTML=""
+document.getElementById("chatUI").style.display="none"
 
 }
 
