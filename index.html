@@ -98,6 +98,7 @@ margin-top:6px;
 <button onclick="sendMessage()">Send</button>
 <button onclick="leaveRoom()">Leave Room</button>
 <button onclick="startVoice()">Enable Mic</button>
+<button onclick="toggleMute()">Mute / Unmute</button>
 </div>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -142,6 +143,11 @@ alert("Username set")
 
 function createRoom(){
 
+  if(username==""){
+alert("Set username first")
+return
+}
+  
 let name=document.getElementById("roomName").value
 let pass=document.getElementById("roomPassword").value
 let type=document.getElementById("roomType").value
@@ -223,7 +229,8 @@ document.getElementById("roomTitle").innerText=name
 document.getElementById("messages").innerHTML=""
 
 listenMessages()
-
+let box=document.getElementById("messages")
+box.scrollTop=box.scrollHeight
 }
 
 function listenMessages(){
@@ -249,6 +256,10 @@ div.appendChild(img)
 }
 
 document.getElementById("messages").appendChild(div)
+
+  let box=document.getElementById("messages")
+box.scrollTop=box.scrollHeight
+  
 document.getElementById("messages").scrollTop =
 document.getElementById("messages").scrollHeight
 })
@@ -335,6 +346,15 @@ audio.srcObject=event.streams[0]
 audio.autoplay=true
 document.body.appendChild(audio)
 }
+
+}
+function toggleMute(){
+
+if(!localStream)return
+
+localStream.getAudioTracks().forEach(track=>{
+track.enabled=!track.enabled
+})
 
 }
 </script>
